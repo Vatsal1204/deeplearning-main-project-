@@ -4,10 +4,4 @@ numpy
 requests
 beautifulsoup4
 plotly
-transformers
-torch
-torchvision
-torchaudio
-accelerate
-sentencepiece
-protobuf
+urllib3
