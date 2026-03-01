@@ -16,635 +16,665 @@ warnings.filterwarnings('ignore')
 
 # Page config
 st.set_page_config(
-    page_title="AURORA INTELLIGENCE",
-    page_icon="✨",
+    page_title="NEURAL AURORA",
+    page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
+# Initialize session state
+if 'history' not in st.session_state:
+    st.session_state.history = []
+if 'analysis_count' not in st.session_state:
+    st.session_state.analysis_count = 0
+
 # =============================================
-# LOAD AI MODELS
+# LOAD DEEP LEARNING MODELS
 # =============================================
-@st.cache_resource(show_spinner=False)
-def load_ai_models():
-    """Load AI models"""
+@st.cache_resource
+def load_dl_models():
+    """Load deep learning models"""
     models = {}
     
-    with st.spinner("✨ Initializing AI..."):
-        progress = st.progress(0)
+    with st.spinner("🧠 Loading Deep Learning Models..."):
+        # Entity Recognition
+        models['ner'] = pipeline(
+            "ner", 
+            model="dslim/bert-base-NER",
+            aggregation_strategy="simple"
+        )
         
-        models['ner'] = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-        progress.progress(50)
+        # Classification
+        models['classifier'] = pipeline(
+            "zero-shot-classification",
+            model="facebook/bart-large-mnli"
+        )
         
-        models['classifier'] = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
-        progress.progress(100)
+        # Sentiment Analysis
+        models['sentiment'] = pipeline(
+            "sentiment-analysis",
+            model="cardiffnlp/twitter-roberta-base-sentiment-latest"
+        )
         
-        time.sleep(0.5)
-        progress.empty()
-    
     return models
 
-models = load_ai_models()
+# Load models with error handling
+try:
+    models = load_dl_models()
+    dl_available = True
+    st.sidebar.success("🧠 Deep Learning Active")
+except Exception as e:
+    st.sidebar.warning("⚠️ Deep Learning unavailable (memory limit)")
+    dl_available = False
 
 # =============================================
-# ENHANCED EXTRACTION FUNCTIONS
+# COMPLETE EXTRACTION FUNCTIONS
 # =============================================
-def format_phone_number(phone):
-    """Format phone number to Indian format"""
-    # Remove all non-digits
-    digits = re.sub(r'\D', '', str(phone))
-    
-    # Indian mobile numbers: 10 digits starting with 6-9
-    if len(digits) == 10 and digits[0] in ['6','7','8','9']:
-        return f"+91 {digits[:5]} {digits[5:]}"
-    
-    # Landline with STD code
-    elif len(digits) in [11, 12] and digits.startswith('0'):
-        return f"{digits[:5]} {digits[5:]}"
-    
-    # If it's a valid-looking number but not standard format
-    elif len(digits) >= 10:
-        return f"+91 {digits[-10:-5]} {digits[-5:]}"
-    
-    return None
-
-def extract_complete_address(soup):
-    """Extract complete address from page"""
-    
-    # Common address patterns in Indian websites
-    address_patterns = [
-        r'Plot No\.?\s*[\d,\-]+\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^-–—]+',
-        r'[A-Za-z0-9\s,]+(?:GIDC|Industrial Estate|Phase)[^,]+(?:Jamnagar|Gujarat)[^,]*',
-        r'Address[:\s]+([^.\n]+(?:\.[^.\n]+)*)'
-    ]
-    
-    for pattern in address_patterns:
-        match = re.search(pattern, soup.get_text(), re.I)
-        if match:
-            return match.group(0).strip()
-    
-    return None
-
-def analyze_website(url):
-    """Extract data from ANY website"""
+def extract_all_info(url):
+    """Extract ALL possible information from website"""
     
     try:
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
-        # Use a more realistic browser header
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
+        # Use multiple user agents to avoid blocking
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
         
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {'User-Agent': np.random.choice(user_agents)}
+        response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Get text content
+        # Get all text
         page_text = soup.get_text()
-        clean_text = ' '.join(page_text.split())[:2000]
+        clean_text = ' '.join(page_text.split())[:3000]
         
-        # Basic info
-        title = soup.title.string if soup.title else url
+        # =========================================
+        # BASIC INFO
+        # =========================================
+        title = soup.title.string if soup.title else "No title found"
+        
+        # Meta description
         meta_desc = soup.find('meta', attrs={'name': 'description'})
         description = meta_desc['content'] if meta_desc else ""
         
-        # AI Entity Recognition
-        ner_results = models['ner'](clean_text[:1024])
+        # Meta keywords
+        meta_keys = soup.find('meta', attrs={'name': 'keywords'})
+        keywords = meta_keys['content'] if meta_keys else ""
         
+        # Open Graph tags (Facebook)
+        og_title = soup.find('meta', property='og:title')
+        og_title = og_title['content'] if og_title else ""
+        
+        og_desc = soup.find('meta', property='og:description')
+        og_desc = og_desc['content'] if og_desc else ""
+        
+        og_image = soup.find('meta', property='og:image')
+        og_image = og_image['content'] if og_image else ""
+        
+        # Twitter cards
+        twitter_title = soup.find('meta', attrs={'name': 'twitter:title'})
+        twitter_title = twitter_title['content'] if twitter_title else ""
+        
+        # =========================================
+        # DEEP LEARNING ENTITY RECOGNITION
+        # =========================================
         orgs = []
         people = []
-        locs = []
-        for e in ner_results:
-            if e['entity_group'] == 'ORG':
-                orgs.append(e['word'])
-            elif e['entity_group'] == 'PER':
-                people.append(e['word'])
-            elif e['entity_group'] == 'LOC':
-                locs.append(e['word'])
+        locations = []
         
-        # Classify website
-        categories = ["Business", "Technology", "E-commerce", "Education", "News", 
-                     "Social Media", "Entertainment", "Government", "Healthcare"]
+        if dl_available:
+            ner_results = models['ner'](clean_text[:1024])
+            
+            for entity in ner_results:
+                if entity['entity_group'] == 'ORG':
+                    orgs.append(entity['word'])
+                elif entity['entity_group'] == 'PER':
+                    people.append(entity['word'])
+                elif entity['entity_group'] == 'LOC':
+                    locations.append(entity['word'])
         
-        classification = models['classifier'](clean_text[:500], categories)
+        # =========================================
+        # CLASSIFICATION
+        # =========================================
+        if dl_available:
+            categories = [
+                "Technology", "Business", "E-commerce", "Education", 
+                "News", "Social Media", "Entertainment", "Government", 
+                "Healthcare", "Finance", "Real Estate", "Travel"
+            ]
+            
+            classification = models['classifier'](clean_text[:500], categories)
+            website_type = classification['labels'][0]
+            type_conf = classification['scores'][0]
+            all_types = list(zip(classification['labels'][:8], classification['scores'][:8]))
+        else:
+            # Fallback
+            website_type = "Unknown"
+            type_conf = 0.5
+            all_types = [("Unknown", 0.5)]
         
-        # Extract emails
+        # =========================================
+        # SENTIMENT ANALYSIS
+        # =========================================
+        sentiment = "Neutral"
+        sentiment_score = 0.5
+        
+        if dl_available and len(clean_text) > 100:
+            try:
+                sentiment_result = models['sentiment'](clean_text[:512])[0]
+                sentiment = sentiment_result['label']
+                sentiment_score = sentiment_result['score']
+            except:
+                pass
+        
+        # =========================================
+        # EMAIL EXTRACTION
+        # =========================================
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
         emails = list(set(re.findall(email_pattern, response.text)))
-        emails = [e for e in emails if not e.endswith(('.png', '.jpg', '.css', '.js'))][:5]
+        emails = [e for e in emails if not any(ext in e.lower() for ext in ['.png', '.jpg', '.css', '.js', '.svg'])]
         
-        # Extract and format phone numbers
-        phone_pattern = r'[+]?[\d\s\-\(\)]{8,20}'
-        raw_phones = list(set(re.findall(phone_pattern, response.text)))
+        # =========================================
+        # PHONE EXTRACTION
+        # =========================================
+        def format_phone(phone):
+            digits = re.sub(r'\D', '', str(phone))
+            if len(digits) == 10 and digits[0] in ['6','7','8','9']:
+                return f"+91 {digits[:5]} {digits[5:]}"
+            elif len(digits) == 11 and digits.startswith('0'):
+                return f"{digits[1:6]} {digits[6:]}"
+            elif len(digits) == 12 and digits.startswith('91'):
+                return f"+{digits[:2]} {digits[2:7]} {digits[7:]}"
+            return None
+        
+        phone_patterns = [
+            r'\+?91[\s-]?[6-9]\d{9}',
+            r'0[6-9]\d{9}',
+            r'\d{5}[\s-]?\d{5}',
+            r'\(\d{3}\)[\s-]?\d{3}[\s-]?\d{4}'
+        ]
         
         phones = []
-        for p in raw_phones:
-            formatted = format_phone_number(p)
-            if formatted and formatted not in phones:
-                phones.append(formatted)
+        for pattern in phone_patterns:
+            found = re.findall(pattern, response.text)
+            for f in found:
+                formatted = format_phone(f)
+                if formatted and formatted not in phones:
+                    phones.append(formatted)
         
-        # Extract complete address
-        address = extract_complete_address(soup)
-        if not address:
-            # Try to find address in common containers
-            address_elem = soup.find('span', string=re.compile(r'Plot|Address|Location', re.I))
-            if address_elem:
-                parent = address_elem.find_parent(['div', 'section', 'li'])
-                if parent:
-                    address = parent.get_text().strip()
+        # =========================================
+        # ADDRESS EXTRACTION
+        # =========================================
+        address = None
+        addr_patterns = [
+            r'Plot No\.?\s*[\d,\-]+\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^-–—]+',
+            r'[A-Za-z0-9\s,]+(?:GIDC|Industrial Estate|Phase)[^,]+(?:Jamnagar|Gujarat)',
+            r'Address[:\s]+([^.\n]+(?:\.[^.\n]+)*)',
+            r'Located at[:\s]+([^.\n]+)'
+        ]
         
-        # Social links
-        social = []
+        for pattern in addr_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                address = match.group(0).strip()
+                break
+        
+        # =========================================
+        # SOCIAL MEDIA LINKS
+        # =========================================
+        social = {
+            'facebook': [],
+            'twitter': [],
+            'linkedin': [],
+            'instagram': [],
+            'youtube': []
+        }
+        
         for link in soup.find_all('a', href=True):
             href = link['href'].lower()
-            if any(d in href for d in ['facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com']):
-                social.append(link['href'])
+            if 'facebook.com' in href:
+                social['facebook'].append(link['href'])
+            elif 'twitter.com' in href or 'x.com' in href:
+                social['twitter'].append(link['href'])
+            elif 'linkedin.com' in href:
+                social['linkedin'].append(link['href'])
+            elif 'instagram.com' in href:
+                social['instagram'].append(link['href'])
+            elif 'youtube.com' in href:
+                social['youtube'].append(link['href'])
+        
+        # =========================================
+        # BUSINESS HOURS
+        # =========================================
+        hours_patterns = [
+            r'(?:Open|Hours|Timing)[:\s]+([^.\n]+)',
+            r'(\d{1,2}(?::\d{2})?\s*(?:AM|PM)\s*[–-]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM))'
+        ]
+        
+        hours = None
+        for pattern in hours_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                hours = match.group(0).strip()
+                break
+        
+        # =========================================
+        # RATING
+        # =========================================
+        rating = None
+        rating_patterns = [
+            r'([4-5]\.[0-9])\s*[★✩⭐]',
+            r'Rating[:\s]+([0-9.]+)/5',
+            r'([0-9.]+)\s*out of\s*5'
+        ]
+        
+        for pattern in rating_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                rating = float(match.group(1))
+                break
+        
+        # =========================================
+        # REVIEWS COUNT
+        # =========================================
+        reviews = None
+        reviews_pattern = r'([0-9,]+)\s*(?:reviews?|Ratings?)'
+        match = re.search(reviews_pattern, page_text, re.I)
+        if match:
+            reviews = match.group(1)
+        
+        # =========================================
+        # WEBSITE TECHNOLOGY
+        # =========================================
+        tech_stack = []
+        tech_patterns = {
+            'WordPress': ['wp-content', 'wordpress'],
+            'Shopify': ['shopify'],
+            'WooCommerce': ['woocommerce'],
+            'React': ['react', 'reactjs'],
+            'Angular': ['angular', 'ng-'],
+            'Vue.js': ['vue'],
+            'Bootstrap': ['bootstrap'],
+            'jQuery': ['jquery'],
+            'PHP': ['.php'],
+            'Python': ['django', 'flask'],
+            'Node.js': ['node', 'express']
+        }
+        
+        html_content = response.text.lower()
+        for tech, patterns in tech_patterns.items():
+            if any(p in html_content for p in patterns):
+                tech_stack.append(tech)
+        
+        # Update history
+        st.session_state.history.append({
+            'url': url,
+            'title': title,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'type': website_type,
+            'dl_used': dl_available
+        })
+        st.session_state.analysis_count += 1
         
         return {
-            'title': title,
-            'description': description[:200],
-            'url': url,
-            'word_count': len(page_text.split()),
-            'orgs': list(set(orgs))[:8],
-            'people': list(set(people))[:8],
-            'locs': list(set(locs))[:8],
-            'type': classification['labels'][0],
-            'type_conf': classification['scores'][0],
-            'all_types': list(zip(classification['labels'][:5], classification['scores'][:5])),
-            'emails': emails,
-            'phones': phones[:5],
-            'social': list(set(social))[:5],
-            'address': address if address else "Address not found"
+            'basic': {
+                'title': title,
+                'description': description,
+                'keywords': keywords,
+                'url': url,
+                'word_count': len(page_text.split())
+            },
+            'social_meta': {
+                'og_title': og_title,
+                'og_desc': og_desc,
+                'og_image': og_image,
+                'twitter_title': twitter_title
+            },
+            'deep_learning': {
+                'orgs': list(set(orgs))[:10],
+                'people': list(set(people))[:10],
+                'locations': list(set(locations))[:10],
+                'website_type': website_type,
+                'confidence': type_conf,
+                'all_types': all_types,
+                'sentiment': sentiment,
+                'sentiment_score': sentiment_score,
+                'dl_used': dl_available
+            },
+            'contact': {
+                'emails': emails[:8],
+                'phones': phones[:8]
+            },
+            'business': {
+                'address': address,
+                'hours': hours,
+                'rating': rating,
+                'reviews': reviews
+            },
+            'social': {k: list(set(v))[:3] for k, v in social.items() if v},
+            'technology': tech_stack[:10]
         }
         
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Error analyzing {url}: {str(e)}")
         return None
 
 # =============================================
-# STUNNING LUXURY DESIGN
+# UI
 # =============================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
-    
     .stApp {
         background: #0A0F1F;
-        background-image: 
-            radial-gradient(circle at 10% 20%, rgba(255, 215, 0, 0.03) 0%, transparent 30%),
-            radial-gradient(circle at 90% 50%, rgba(255, 215, 0, 0.03) 0%, transparent 40%);
     }
-    
-    .orb {
-        position: fixed;
-        width: 300px;
-        height: 300px;
-        border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%, rgba(255,215,0,0.15), transparent 70%);
-        filter: blur(40px);
-        z-index: 0;
-        animation: float 20s infinite ease-in-out;
+    h1, h2, h3 {
+        color: #FFD700 !important;
     }
-    
-    @keyframes float {
-        0%, 100% { transform: translate(0, 0) scale(1); }
-        33% { transform: translate(30px, -30px) scale(1.1); }
-        66% { transform: translate(-20px, 20px) scale(0.9); }
-    }
-    
-    .hero {
-        background: linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(255,215,0,0.05) 100%);
-        backdrop-filter: blur(10px);
+    .metric-box {
+        background: rgba(255,215,0,0.05);
         border: 1px solid rgba(255,215,0,0.2);
-        border-radius: 32px;
-        padding: 3rem 2rem;
-        margin: 1rem 0 2rem 0;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .hero::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(255,215,0,0.1) 0%, transparent 70%);
-        animation: rotate 20s linear infinite;
-    }
-    
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    
-    .hero-content {
-        position: relative;
-        z-index: 2;
+        border-radius: 10px;
+        padding: 1.5rem;
         text-align: center;
     }
-    
-    .hero-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 4rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #FFD700, #FFA500, #FFD700);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
-        animation: shimmer 3s infinite;
+    .metric-number {
+        color: #FFD700;
+        font-size: 2.5rem;
+        font-weight: bold;
     }
-    
-    @keyframes shimmer {
-        0% { background-position: -200% center; }
-        100% { background-position: 200% center; }
-    }
-    
-    .glass-card {
+    .info-box {
         background: rgba(255,255,255,0.03);
-        backdrop-filter: blur(10px);
         border: 1px solid rgba(255,215,0,0.1);
-        border-radius: 24px;
+        border-radius: 10px;
         padding: 1.5rem;
-        transition: all 0.3s ease;
-        height: 100%;
-        margin: 0.5rem 0;
-    }
-    
-    .glass-card:hover {
-        transform: translateY(-5px);
-        border-color: rgba(255,215,0,0.3);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    }
-    
-    .metric-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
         margin: 1rem 0;
     }
-    
-    .metric-item {
-        background: rgba(255,255,255,0.02);
-        border: 1px solid rgba(255,215,0,0.1);
-        border-radius: 16px;
-        padding: 1rem;
-        text-align: center;
-    }
-    
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #FFD700;
-        line-height: 1.2;
-    }
-    
-    .metric-label {
-        color: rgba(255,255,255,0.6);
-        font-size: 0.8rem;
-        text-transform: uppercase;
-    }
-    
-    .entity-tag {
-        display: inline-block;
+    .tag {
         background: rgba(255,215,0,0.1);
-        border: 1px solid rgba(255,215,0,0.2);
+        border: 1px solid rgba(255,215,0,0.3);
         border-radius: 20px;
         padding: 0.3rem 1rem;
+        display: inline-block;
         margin: 0.2rem;
         color: #FFD700;
-        font-size: 0.85rem;
     }
-    
-    .contact-item {
-        background: rgba(255,215,0,0.03);
-        border: 1px solid rgba(255,215,0,0.1);
-        border-radius: 12px;
-        padding: 0.8rem;
-        margin: 0.5rem 0;
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-    }
-    
-    .contact-icon {
-        font-size: 1.2rem;
-        background: rgba(255,215,0,0.1);
-        width: 35px;
-        height: 35px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-    }
-    
-    .gold-input {
-        background: rgba(255,255,255,0.05);
-        border: 2px solid rgba(255,215,0,0.2);
-        border-radius: 50px;
-        padding: 0.8rem 1.5rem;
-        color: white;
-        font-size: 1rem;
-        width: 100%;
-    }
-    
-    .gold-input:focus {
-        border-color: #FFD700;
-        outline: none;
-    }
-    
-    .gold-button {
-        background: linear-gradient(135deg, #FFD700, #FFA500);
-        color: #0A0F1F;
-        border: none;
-        padding: 0.8rem 2rem;
-        border-radius: 50px;
-        font-weight: 600;
-        cursor: pointer;
-        width: 100%;
-        font-size: 1rem;
-        transition: all 0.3s;
-    }
-    
-    .gold-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 30px rgba(255,215,0,0.3);
-    }
-    
-    .gold-divider {
-        height: 2px;
-        background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
-        margin: 2rem 0;
-    }
-    
-    .confidence-bar {
-        width: 100%;
-        height: 4px;
-        background: rgba(255,255,255,0.1);
-        border-radius: 2px;
-        margin: 0.3rem 0;
-        overflow: hidden;
-    }
-    
-    .confidence-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #FFD700, #FFA500);
-        border-radius: 2px;
-        transition: width 0.5s ease;
-    }
-    
-    .address-box {
-        background: rgba(255,215,0,0.05);
-        border-left: 4px solid #FFD700;
-        border-radius: 12px;
-        padding: 1.2rem;
-        margin: 1rem 0;
-        font-family: monospace;
-        line-height: 1.6;
-        color: white;
-    }
-    
-    .loader {
-        width: 40px;
-        height: 40px;
-        border: 3px solid rgba(255,215,0,0.1);
-        border-top-color: #FFD700;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 1rem auto;
-    }
-    
-    @keyframes spin {
-        to { transform: rotate(360deg); }
+    .section-header {
+        color: #FFD700;
+        font-size: 1.5rem;
+        margin: 2rem 0 1rem 0;
+        border-bottom: 1px solid rgba(255,215,0,0.2);
+        padding-bottom: 0.5rem;
     }
 </style>
-
-<div class='orb' style='top: -100px; left: -100px;'></div>
-<div class='orb' style='bottom: -100px; right: -100px;'></div>
 """, unsafe_allow_html=True)
 
-# =============================================
-# MAIN UI
-# =============================================
-
-# Hero Section
-st.markdown("""
-<div class='hero'>
-    <div class='hero-content'>
-        <div style='margin-bottom: 1rem;'>
-            <span style='background: rgba(255,215,0,0.1); padding: 0.3rem 1.2rem; border-radius: 50px; color: #FFD700;'>✨ AI-POWERED</span>
-        </div>
-        <h1 class='hero-title'>AURORA INTELLIGENCE</h1>
-        <p style='color: rgba(255,255,255,0.7);'>Analyze any website in the world with AI</p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# Input Section
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    url = st.text_input("", placeholder="https://example.com", label_visibility="collapsed")
+# Sidebar
+with st.sidebar:
+    st.markdown("# 🧠 **NEURAL AURORA**")
+    st.markdown("---")
     
-    col1, col2, col3 = st.columns([1, 2, 1])
+    if dl_available:
+        st.success("🧠 Deep Learning: ACTIVE")
+        st.info("Models: BERT, BART, RoBERTa")
+    else:
+        st.warning("⚠️ Deep Learning: FALLBACK MODE")
+    
+    menu = st.radio("Navigation", ["🔍 Analyze", "📊 Dashboard", "📚 History"])
+    
+    st.markdown("---")
+    st.markdown(f"**Analyses:** {st.session_state.analysis_count}")
+    st.markdown(f"**Websites:** {len(st.session_state.history)}")
+
+# Main content
+if menu == "🔍 Analyze":
+    st.markdown("# 🧠 Neural Aurora")
+    st.markdown("### Deep Learning Website Intelligence")
+    
+    # Input
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        url = st.text_input("", placeholder="https://example.com", label_visibility="collapsed")
     with col2:
-        analyze = st.button("✨ ANALYZE", use_container_width=True)
-
-# Examples
-st.markdown("""
-<div style='display: flex; justify-content: center; gap: 1rem; margin: 1rem 0; flex-wrap: wrap;'>
-    <span class='entity-tag'>google.com</span>
-    <span class='entity-tag'>github.com</span>
-    <span class='entity-tag'>netflix.com</span>
-    <span class='entity-tag'>harvard.edu</span>
-    <span class='entity-tag'>wikipedia.org</span>
-</div>
-""", unsafe_allow_html=True)
-
-# Analysis
-if analyze and url:
-    with st.spinner(""):
-        st.markdown("<div class='loader'></div>", unsafe_allow_html=True)
-        data = analyze_website(url)
-        
-        if data:
-            st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
+        analyze = st.button("🧠 ANALYZE", use_container_width=True)
+    
+    if analyze and url:
+        with st.spinner("🧠 Deep Learning models processing..."):
+            data = extract_all_info(url)
             
-            # Title
-            st.markdown(f"<h1 style='font-family: Playfair Display; color: white;'>{data['title']}</h1>", unsafe_allow_html=True)
-            st.caption(data['url'])
-            
-            if data['description']:
-                st.markdown(f"<p style='color: rgba(255,255,255,0.7);'>{data['description']}</p>", unsafe_allow_html=True)
-            
-            st.markdown("<div class='gold-divider'></div>", unsafe_allow_html=True)
-            
-            # Metrics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.markdown(f"""
-                <div class='metric-item'>
-                    <div class='metric-value'>{data['word_count']}</div>
-                    <div class='metric-label'>Words</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class='metric-item'>
-                    <div class='metric-value'>{len(data['orgs'])}</div>
-                    <div class='metric-label'>Organizations</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                st.markdown(f"""
-                <div class='metric-item'>
-                    <div class='metric-value'>{len(data['emails'])}</div>
-                    <div class='metric-label'>Emails</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col4:
-                st.markdown(f"""
-                <div class='metric-item'>
-                    <div class='metric-value'>{len(data['phones']) + len(data['social'])}</div>
-                    <div class='metric-label'>Contacts</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("<div class='gold-divider'></div>", unsafe_allow_html=True)
-            
-            # AI Classification
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"""
-                <div class='glass-card'>
-                    <h3 style='color: #FFD700; margin-bottom: 1rem;'>🎯 AI Classification</h3>
-                    <h2 style='color: white;'>{data['type']}</h2>
-                    <div class='confidence-bar'>
-                        <div class='confidence-fill' style='width: {data['type_conf'] * 100}%;'></div>
-                    </div>
-                    <p style='color: rgba(255,255,255,0.6);'>Confidence: {data['type_conf'] * 100:.1f}%</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                # Build categories HTML without f-strings inside
-                html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">📊 All Categories</h3>'
-                for cat, conf in data['all_types']:
-                    html += f"""
-                    <div style='margin: 0.5rem 0;'>
-                        <div style='display: flex; justify-content: space-between;'>
-                            <span style='color: white;'>{cat}</span>
-                            <span style='color: #FFD700;'>{conf*100:.1f}%</span>
-                        </div>
-                        <div class='confidence-bar'>
-                            <div class='confidence-fill' style='width: {conf * 100}%;'></div>
-                        </div>
-                    </div>
-                    """
-                html += '</div>'
-                st.markdown(html, unsafe_allow_html=True)
-            
-            st.markdown("<div class='gold-divider'></div>", unsafe_allow_html=True)
-            
-            # Entities
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if data['orgs']:
-                    html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">🏢 Organizations</h3>'
-                    for org in data['orgs']:
-                        html += f'<span class="entity-tag">{org}</span>'
-                    html += '</div>'
-                    st.markdown(html, unsafe_allow_html=True)
-            
-            with col2:
-                if data['people']:
-                    html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">👤 People</h3>'
-                    for person in data['people']:
-                        html += f'<span class="entity-tag">{person}</span>'
-                    html += '</div>'
-                    st.markdown(html, unsafe_allow_html=True)
-            
-            with col3:
-                if data['locs']:
-                    html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">📍 Locations</h3>'
-                    for loc in data['locs']:
-                        html += f'<span class="entity-tag">{loc}</span>'
-                    html += '</div>'
-                    st.markdown(html, unsafe_allow_html=True)
-            
-            st.markdown("<div class='gold-divider'></div>", unsafe_allow_html=True)
-            
-            # Address Section
-            if data['address'] and data['address'] != "Address not found":
-                st.markdown(f"""
-                <div class='glass-card'>
-                    <h3 style='color: #FFD700; margin-bottom: 1rem;'>📍 Complete Address</h3>
-                    <div class='address-box'>
-                        {data['address']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            if data:
+                # Title
+                st.markdown(f"# {data['basic']['title']}")
+                st.caption(data['basic']['url'])
                 
-                st.markdown("<div class='gold-divider'></div>", unsafe_allow_html=True)
-            
-            # Contact Info
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if data['emails'] or data['phones']:
-                    html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">📞 Contact</h3>'
-                    
-                    for email in data['emails']:
-                        html += f"""
-                        <div class='contact-item'>
-                            <div class='contact-icon'>📧</div>
-                            <div style='color: white;'>{email}</div>
+                if data['basic']['description']:
+                    st.markdown(f"*{data['basic']['description']}*")
+                
+                st.markdown("---")
+                
+                # Metrics Row
+                cols = st.columns(5)
+                metrics = [
+                    (data['basic']['word_count'], "Words"),
+                    (len(data['deep_learning']['orgs']), "Organizations"),
+                    (len(data['contact']['emails']), "Emails"),
+                    (len(data['contact']['phones']), "Phones"),
+                    (len(data['technology']), "Technologies")
+                ]
+                
+                for col, (val, label) in zip(cols, metrics):
+                    with col:
+                        st.markdown(f"""
+                        <div class='metric-box'>
+                            <div class='metric-number'>{val}</div>
+                            <div>{label}</div>
                         </div>
-                        """
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Deep Learning Section
+                st.markdown("<div class='section-header'>🧠 Deep Learning Analysis</div>", unsafe_allow_html=True)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### Primary Classification")
+                    st.markdown(f"## {data['deep_learning']['website_type']}")
+                    st.progress(data['deep_learning']['confidence'])
+                    st.markdown(f"Confidence: {data['deep_learning']['confidence']*100:.1f}%")
                     
-                    for phone in data['phones']:
-                        html += f"""
-                        <div class='contact-item'>
-                            <div class='contact-icon'>📱</div>
-                            <div style='color: white;'>{phone}</div>
-                        </div>
-                        """
+                    if data['deep_learning']['sentiment']:
+                        st.markdown(f"### Sentiment: {data['deep_learning']['sentiment']}")
+                        st.progress(data['deep_learning']['sentiment_score'])
+                
+                with col2:
+                    st.markdown("### All Categories")
+                    for cat, conf in data['deep_learning']['all_types'][:5]:
+                        c1, c2, c3 = st.columns([3, 1, 4])
+                        with c1:
+                            st.markdown(cat)
+                        with c2:
+                            st.markdown(f"{conf*100:.1f}%")
+                        with c3:
+                            st.progress(conf)
+                
+                # Entities
+                if data['deep_learning']['orgs'] or data['deep_learning']['people'] or data['deep_learning']['locations']:
+                    st.markdown("### Entities Found")
                     
-                    html += '</div>'
-                    st.markdown(html, unsafe_allow_html=True)
-            
-            with col2:
+                    if data['deep_learning']['orgs']:
+                        st.markdown("**Organizations:**")
+                        cols = st.columns(4)
+                        for i, org in enumerate(data['deep_learning']['orgs'][:4]):
+                            with cols[i % 4]:
+                                st.markdown(f"<span class='tag'>{org}</span>", unsafe_allow_html=True)
+                    
+                    if data['deep_learning']['people']:
+                        st.markdown("**People:**")
+                        st.write(", ".join(data['deep_learning']['people'][:5]))
+                    
+                    if data['deep_learning']['locations']:
+                        st.markdown("**Locations:**")
+                        st.write(", ".join(data['deep_learning']['locations'][:5]))
+                
+                st.markdown("---")
+                
+                # Business Information
+                if data['business']['address'] or data['business']['hours'] or data['business']['rating']:
+                    st.markdown("<div class='section-header'>🏢 Business Information</div>", unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if data['business']['address']:
+                            st.markdown("**Address:**")
+                            st.markdown(f"```\n{data['business']['address']}\n```")
+                        
+                        if data['business']['hours']:
+                            st.markdown("**Hours:**")
+                            st.markdown(data['business']['hours'])
+                    
+                    with col2:
+                        if data['business']['rating']:
+                            st.markdown("**Rating:**")
+                            st.markdown(f"{'⭐' * int(data['business']['rating'])} {data['business']['rating']}/5")
+                        
+                        if data['business']['reviews']:
+                            st.markdown("**Reviews:**")
+                            st.markdown(data['business']['reviews'])
+                    
+                    st.markdown("---")
+                
+                # Contact Information
+                if data['contact']['emails'] or data['contact']['phones']:
+                    st.markdown("<div class='section-header'>📞 Contact Information</div>", unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if data['contact']['emails']:
+                            st.markdown("**Email Addresses:**")
+                            for email in data['contact']['emails']:
+                                st.code(email)
+                    
+                    with col2:
+                        if data['contact']['phones']:
+                            st.markdown("**Phone Numbers:**")
+                            for phone in data['contact']['phones']:
+                                st.code(phone)
+                    
+                    st.markdown("---")
+                
+                # Social Media
                 if data['social']:
-                    html = '<div class="glass-card"><h3 style="color: #FFD700; margin-bottom: 1rem;">🌐 Social</h3>'
+                    st.markdown("<div class='section-header'>🌐 Social Media</div>", unsafe_allow_html=True)
                     
-                    for link in data['social']:
-                        display_link = link[:50] + '...' if len(link) > 50 else link
-                        html += f"""
-                        <div class='contact-item'>
-                            <div class='contact-icon'>🔗</div>
-                            <a href='{link}' target='_blank' style='color: #FFD700; text-decoration: none;'>{display_link}</a>
-                        </div>
-                        """
+                    cols = st.columns(len(data['social']))
+                    for i, (platform, links) in enumerate(data['social'].items()):
+                        with cols[i]:
+                            st.markdown(f"**{platform.title()}**")
+                            for link in links:
+                                st.markdown(f"[Link]({link})")
                     
-                    html += '</div>'
-                    st.markdown(html, unsafe_allow_html=True)
+                    st.markdown("---")
+                
+                # Technology Stack
+                if data['technology']:
+                    st.markdown("<div class='section-header'>🛠️ Technology Stack</div>", unsafe_allow_html=True)
+                    
+                    cols = st.columns(4)
+                    for i, tech in enumerate(data['technology']):
+                        with cols[i % 4]:
+                            st.markdown(f"<span class='tag'>{tech}</span>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                
+                # Social Meta Tags
+                if data['social_meta']['og_title'] or data['social_meta']['og_desc']:
+                    with st.expander("📱 Social Media Meta Tags"):
+                        if data['social_meta']['og_title']:
+                            st.markdown(f"**OG Title:** {data['social_meta']['og_title']}")
+                        if data['social_meta']['og_desc']:
+                            st.markdown(f"**OG Description:** {data['social_meta']['og_desc']}")
+                        if data['social_meta']['og_image']:
+                            st.markdown(f"**OG Image:** {data['social_meta']['og_image']}")
+                
+                # Keywords
+                if data['basic']['keywords']:
+                    with st.expander("🔑 Meta Keywords"):
+                        st.markdown(data['basic']['keywords'])
 
-# Footer
-st.markdown("""
-<div style='text-align: center; margin: 3rem 0 1rem 0;'>
-    <div style='color: rgba(255,215,0,0.3);'>✨ AURORA INTELLIGENCE ✨</div>
-    <div style='color: rgba(255,255,255,0.2); font-size: 0.8rem;'>Powered by BERT • Works on any website</div>
-</div>
-""", unsafe_allow_html=True)
+elif menu == "📊 Dashboard":
+    st.markdown("# 📊 Analytics Dashboard")
+    
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=list(range(len(df))),
+                y=[1]*len(df),
+                mode='lines+markers',
+                line=dict(color='#FFD700', width=2),
+                marker=dict(size=8, color='#FFD700')
+            ))
+            fig.update_layout(
+                title="Analysis Timeline",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white'),
+                xaxis_title="Analysis #",
+                yaxis_title=""
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            cat_counts = df['type'].value_counts()
+            fig = go.Figure(data=[go.Pie(
+                labels=cat_counts.index,
+                values=cat_counts.values,
+                marker=dict(colors=['#FFD700', '#FFA500', '#FF8C00', '#FF7F50', '#FF6B6B'])
+            )])
+            fig.update_layout(
+                title="Website Categories",
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Analyses", len(df))
+        with col2:
+            st.metric("Unique Websites", df['url'].nunique())
+        with col3:
+            st.metric("Top Category", df['type'].mode()[0] if not df.empty else "N/A")
+        with col4:
+            if 'dl_used' in df.columns:
+                dl_pct = (df['dl_used'].sum() / len(df)) * 100
+                st.metric("Deep Learning %", f"{dl_pct:.1f}%")
+    else:
+        st.info("No analysis history yet")
+
+else:  # History
+    st.markdown("# 📚 Analysis History")
+    
+    if st.session_state.history:
+        for item in reversed(st.session_state.history[-20:]):
+            with st.container():
+                dl_badge = "🧠" if item.get('dl_used', False) else "⚡"
+                st.markdown(f"### {dl_badge} {item['title']}")
+                st.markdown(f"**URL:** {item['url']}")
+                st.markdown(f"**Time:** {item['timestamp']}  |  **Type:** {item['type']}")
+                st.markdown("---")
+    else:
+        st.info("No history yet")
