@@ -1,804 +1,549 @@
-# mega_deep_learning_intelligence.py
-
-import gradio as gr
+import streamlit as st
+import pandas as pd
+import numpy as np
 import requests
 from bs4 import BeautifulSoup
-import torch
-import torch.nn as nn
-import numpy as np
-import pandas as pd
 import re
-import json
 import time
 from datetime import datetime
+import plotly.graph_objects as go
+import plotly.express as px
+from urllib.parse import urlparse, urljoin
 import warnings
 warnings.filterwarnings('ignore')
 
-print("🧠 LOADING 10+ DEEP LEARNING MODELS...")
-print("=" * 60)
-
-# =============================================
-# MODEL 1: BERT BASE (Entity Recognition)
-# =============================================
-from transformers import (
-    BertForTokenClassification, BertTokenizer,
-    AutoModelForTokenClassification, AutoTokenizer,
-    pipeline, AutoModelForSequenceClassification,
-    AutoModelForQuestionAnswering, AutoModelForSeq2SeqLM,
-    T5ForConditionalGeneration, T5Tokenizer,
-    GPT2LMHeadModel, GPT2Tokenizer,
-    BartForConditionalGeneration, BartTokenizer,
-    RobertaForSequenceClassification, RobertaTokenizer,
-    LayoutLMv3ForTokenClassification, LayoutLMv3Tokenizer,
-    LongformerModel, LongformerTokenizer,
-    BigBirdModel, BigBirdTokenizer
+# Page config
+st.set_page_config(
+    page_title="AURORA INTELLIGENCE",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-print("📥 1/10: Loading BERT-NER (Named Entity Recognition)...")
-ner_model = AutoModelForTokenClassification.from_pretrained("dslim/bert-base-NER")
-ner_tokenizer = AutoTokenizer.from_pretrained("dslim/bert-base-NER")
-ner_pipeline = pipeline("ner", model=ner_model, tokenizer=ner_tokenizer, aggregation_strategy="simple")
+# Initialize session state
+if 'history' not in st.session_state:
+    st.session_state.history = []
+if 'analysis_count' not in st.session_state:
+    st.session_state.analysis_count = 0
 
 # =============================================
-# MODEL 2: RoBERTa (Industry Classification)
+# FAST EXTRACTION FUNCTIONS (NO DEEP LEARNING)
 # =============================================
-print("📥 2/10: Loading RoBERTa (Industry Classifier)...")
-industry_model = RobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
-industry_tokenizer = RobertaTokenizer.from_pretrained("roberta-large-mnli")
-industry_pipeline = pipeline("zero-shot-classification", model=industry_model, tokenizer=industry_tokenizer)
+def format_phone(phone):
+    """Format phone to Indian format"""
+    digits = re.sub(r'\D', '', str(phone))
+    if len(digits) == 10 and digits[0] in ['6','7','8','9']:
+        return f"+91 {digits[:5]} {digits[5:]}"
+    elif len(digits) >= 10:
+        return f"+91 {digits[-10:-5]} {digits[-5:]}"
+    return None
 
-# =============================================
-# MODEL 3: FinBERT (Financial Data Extraction)
-# =============================================
-print("📥 3/10: Loading FinBERT (Financial Intelligence)...")
-try:
-    finbert_model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
-    finbert_tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-    finbert_pipeline = pipeline("sentiment-analysis", model=finbert_model, tokenizer=finbert_tokenizer)
-except:
-    finbert_pipeline = pipeline("sentiment-analysis", model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis")
-
-# =============================================
-# MODEL 4: BART (Summarization & Generation)
-# =============================================
-print("📥 4/10: Loading BART (Summarization)...")
-bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-bart_pipeline = pipeline("summarization", model=bart_model, tokenizer=bart_tokenizer)
-
-# =============================================
-# MODEL 5: T5 (Question Answering)
-# =============================================
-print("📥 5/10: Loading T5 (Question Answering)...")
-t5_model = T5ForConditionalGeneration.from_pretrained("t5-base")
-t5_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-qa_pipeline = pipeline("question-answering", model="deepset/roberta-base-squad2")
-
-# =============================================
-# MODEL 6: Sentence-BERT (Semantic Search)
-# =============================================
-print("📥 6/10: Loading Sentence-BERT (Embeddings)...")
-from sentence_transformers import SentenceTransformer
-sbert_model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# =============================================
-# MODEL 7: GPT-2 (Text Generation/Predictions)
-# =============================================
-# 📥 7/10: Loading GPT-2 (Skipped - Disk Space Full)
-print("📥 7/10: Loading GPT-2 (Skipped - No disk space)...")
-gpt2_model = None
-gpt2_tokenizer = None
-gpt2_pipeline = Nonegpt2_pipeline = pipeline("text-generation", model=gpt2_model, tokenizer=gpt2_tokenizer, max_length=200)
-
-# =============================================
-# MODEL 8: LayoutLMv3 (Document Understanding)
-# =============================================
-print("📥 8/10: Loading LayoutLM (Document Understanding)...")
-try:
-    layout_model = LayoutLMv3ForTokenClassification.from_pretrained("microsoft/layoutlmv3-base")
-    layout_tokenizer = LayoutLMv3Tokenizer.from_pretrained("microsoft/layoutlmv3-base")
-except:
-    print("   LayoutLM skipped (optional)")
-
-# =============================================
-# MODEL 9: Longformer (Long Document Processing)
-# =============================================
-print("📥 9/10: Loading Longformer (Long Context)...")
-longformer_model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
-longformer_tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-
-# =============================================
-# MODEL 10: Flair (Advanced NER)
-# =============================================
-print("📥 10/10: Loading Flair (Advanced NER)...")
-from flair.models import SequenceTagger
-from flair.data import Sentence
-flair_tagger = SequenceTagger.load('ner-ontonotes-large')
-
-print("✅ ALL 10+ DEEP LEARNING MODELS LOADED!")
-print("=" * 60)
-
-
-class DeepLearningWebsiteIntelligence:
-    """
-    Mega Deep Learning System with 10+ Models
-    """
+def extract_all_info(url):
+    """Extract ALL information from website - FAST VERSION"""
     
-    def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"🚀 Using device: {self.device}")
+    try:
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
         
-    def extract_all(self, url):
-        """
-        Main extraction function using all models
-        """
-        start_time = time.time()
-        
-        # Initialize result structure
-        result = {
-            "url": url,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "deep_learning_models_used": [],
-            "company_profile": {},
-            "contact_intelligence": {},
-            "financial_intelligence": {},
-            "people_discovery": {},
-            "technology_analysis": {},
-            "market_intelligence": {},
-            "competitor_analysis": {},
-            "sentiment_analysis": {},
-            "predictive_insights": {},
-            "recommendations": {},
-            "embeddings": None,
-            "confidence_scores": {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        try:
-            # Fetch website
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=15)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Get all text
-            full_text = soup.get_text()
-            clean_text = ' '.join(full_text.split())[:10000]  # First 10K chars
-            
-            # =========================================
-            # 1. COMPANY PROFILE (BERT + RoBERTa)
-            # =========================================
-            print("\n📊 Running Company Profile Analysis...")
-            result["deep_learning_models_used"].append("BERT-NER")
-            result["deep_learning_models_used"].append("RoBERTa-MNLI")
-            
-            # BERT NER
-            ner_results = ner_pipeline(clean_text[:1024])
-            
-            # Extract organizations
-            organizations = [e['word'] for e in ner_results if e['entity_group'] == 'ORG']
-            persons = [e['word'] for e in ner_results if e['entity_group'] == 'PER']
-            locations = [e['word'] for e in ner_results if e['entity_group'] == 'LOC']
-            
-            # Company name from title
-            company_name = soup.title.string if soup.title else "Unknown"
-            
-            # Industry classification with RoBERTa
-            industry_candidates = [
-                "Technology", "Healthcare", "Finance", "Retail", 
-                "Manufacturing", "Education", "Energy", "Media",
-                "Transportation", "Real Estate", "Hospitality", "Agriculture"
-            ]
-            
-            industry_result = industry_pipeline(
-                clean_text[:500],
-                industry_candidates,
-                multi_label=False
-            )
-            
-            result["company_profile"] = {
-                "name": company_name,
-                "detected_organizations": list(set(organizations))[:10],
-                "detected_locations": list(set(locations))[:5],
-                "primary_industry": industry_result['labels'][0],
-                "industry_confidence": industry_result['scores'][0],
-                "all_industry_predictions": [
-                    {"industry": l, "confidence": s} 
-                    for l, s in zip(industry_result['labels'][:3], industry_result['scores'][:3])
-                ]
-            }
-            
-            # =========================================
-            # 2. CONTACT INTELLIGENCE (LayoutLM + Flair)
-            # =========================================
-            print("📞 Running Contact Intelligence...")
-            result["deep_learning_models_used"].append("Flair-NER")
-            
-            # Flair NER for better entity extraction
-            flair_sentence = Sentence(clean_text[:2000])
-            flair_tagger.predict(flair_sentence)
-            
-            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', full_text)
-            phones = re.findall(r'\+?1?\s*\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}', full_text)
-            
-            # Extract entities from Flair
-            flair_entities = {}
-            for entity in flair_sentence.get_spans('ner'):
-                if entity.tag not in flair_entities:
-                    flair_entities[entity.tag] = []
-                flair_entities[entity.tag].append(entity.text)
-            
-            result["contact_intelligence"] = {
-                "emails": list(set(emails))[:10],
-                "phones": list(set(phones))[:10],
-                "flair_entities": {k: list(set(v))[:5] for k, v in flair_entities.items()},
-                "contact_page": self._find_contact_page(soup, url)
-            }
-            
-            # =========================================
-            # 3. FINANCIAL INTELLIGENCE (FinBERT)
-            # =========================================
-            print("💰 Running Financial Intelligence...")
-            result["deep_learning_models_used"].append("FinBERT")
-            
-            # Look for financial terms
-            financial_keywords = ['revenue', 'profit', 'earnings', 'growth', 'market share', 'valuation']
-            financial_context = ""
-            for keyword in financial_keywords:
-                if keyword in clean_text.lower():
-                    # Extract sentences around keyword
-                    sentences = clean_text.split('.')
-                    for sent in sentences:
-                        if keyword in sent.lower():
-                            financial_context += sent + ". "
-            
-            if financial_context:
-                finbert_result = finbert_pipeline(financial_context[:512])
-                result["financial_intelligence"] = {
-                    "financial_sentiment": finbert_result[0]['label'],
-                    "confidence": finbert_result[0]['score'],
-                    "financial_context": financial_context[:500]
-                }
-            else:
-                result["financial_intelligence"] = {
-                    "financial_sentiment": "No financial data found",
-                    "confidence": 0
-                }
-            
-            # =========================================
-            # 4. PEOPLE DISCOVERY (SpanBERT + BiLSTM)
-            # =========================================
-            print("👥 Running People Discovery...")
-            result["deep_learning_models_used"].append("Flair-People-NER")
-            
-            # Extract person entities from Flair
-            people = []
-            for entity in flair_sentence.get_spans('ner'):
-                if entity.tag in ['PER', 'PERSON']:
-                    people.append({
-                        "name": entity.text,
-                        "context": clean_text[max(0, entity.start_position-50):min(len(clean_text), entity.end_position+50)]
-                    })
-            
-            # Look for leadership keywords
-            leadership_roles = ['CEO', 'CTO', 'CFO', 'Founder', 'President', 'Director', 'Manager']
-            leadership = []
-            
-            for role in leadership_roles:
-                if role in clean_text:
-                    # Find sentences with role
-                    sentences = clean_text.split('.')
-                    for sent in sentences:
-                        if role in sent:
-                            # Use NER to find person name in same sentence
-                            sent_ner = ner_pipeline(sent[:512])
-                            for e in sent_ner:
-                                if e['entity_group'] == 'PER':
-                                    leadership.append({
-                                        "role": role,
-                                        "person": e['word'],
-                                        "context": sent.strip()
-                                    })
-                                    break
-            
-            result["people_discovery"] = {
-                "all_people_detected": people[:15],
-                "leadership_team": leadership[:10],
-                "total_people_found": len(people)
-            }
-            
-            # =========================================
-            # 5. TECHNOLOGY ANALYSIS (CodeBERT)
-            # =========================================
-            print("🛠️ Running Technology Stack Analysis...")
-            result["deep_learning_models_used"].append("BERT-Technology-Detection")
-            
-            # Detect tech stack from HTML
-            html_content = str(soup)
-            tech_stack = []
-            
-            tech_patterns = {
-                'React': ['react', 'reactjs', 'jsx'],
-                'Angular': ['angular', 'ng-'],
-                'Vue.js': ['vue', 'vuejs'],
-                'Python': ['django', 'flask', 'python'],
-                'PHP': ['laravel', 'wordpress', 'php'],
-                'Java': ['spring', 'java', 'jsp'],
-                'Node.js': ['node', 'express', 'npm'],
-                'AWS': ['aws', 'amazonaws', 's3'],
-                'Azure': ['azure', 'microsoft azure'],
-                'Google Cloud': ['gcp', 'googlecloud', 'firebase'],
-                'MongoDB': ['mongodb', 'mongo'],
-                'PostgreSQL': ['postgresql', 'postgres'],
-                'MySQL': ['mysql', 'mariadb'],
-                'Docker': ['docker', 'container'],
-                'Kubernetes': ['k8s', 'kubernetes']
-            }
-            
-            for tech, patterns in tech_patterns.items():
-                if any(p in html_content.lower() for p in patterns):
-                    tech_stack.append(tech)
-            
-            result["technology_analysis"] = {
-                "detected_technologies": tech_stack,
-                "html_frameworks": self._detect_html_frameworks(soup),
-                "analytics_detected": self._detect_analytics(html_content)
-            }
-            
-            # =========================================
-            # 6. MARKET INTELLIGENCE (Longformer)
-            # =========================================
-            print("📊 Running Market Intelligence...")
-            result["deep_learning_models_used"].append("Longformer")
-            
-            # Use Longformer for long context understanding
-            inputs = longformer_tokenizer(clean_text[:4096], return_tensors="pt", max_length=4096, truncation=True)
-            
-            # Market positioning keywords
-            market_keywords = ['market leader', 'top provider', 'leading', 'innovative', 'global', 'enterprise']
-            market_mentions = []
-            
-            for keyword in market_keywords:
-                if keyword in clean_text.lower():
-                    # Find sentences with market claims
-                    sentences = clean_text.split('.')
-                    for sent in sentences:
-                        if keyword in sent.lower():
-                            market_mentions.append(sent.strip())
-            
-            result["market_intelligence"] = {
-                "market_claims": market_mentions[:10],
-                "market_position": self._analyze_market_position(clean_text),
-                "key_strengths": self._extract_strengths(clean_text)
-            }
-            
-            # =========================================
-            # 7. COMPETITOR ANALYSIS (Sentence-BERT)
-            # =========================================
-            print("🤝 Running Competitor Analysis...")
-            result["deep_learning_models_used"].append("Sentence-BERT")
-            
-            # Look for competitor mentions
-            competitor_keywords = ['competitor', 'alternative', 'vs', 'versus', 'compared to']
-            competitors = []
-            
-            for keyword in competitor_keywords:
-                if keyword in clean_text.lower():
-                    sentences = clean_text.split('.')
-                    for sent in sentences:
-                        if keyword in sent.lower():
-                            competitors.append(sent.strip())
-            
-            result["competitor_analysis"] = {
-                "mentioned_competitors": competitors[:8],
-                "competitive_advantage": self._extract_competitive_advantage(clean_text)
-            }
-            
-            # =========================================
-            # 8. SENTIMENT ANALYSIS (DistilBERT + XLNet)
-            # =========================================
-            print("😊 Running Multi-Model Sentiment Analysis...")
-            result["deep_learning_models_used"].append("DistilBERT")
-            result["deep_learning_models_used"].append("XLNet")
-            
-            # Split text into sections for sentiment analysis
-            sections = clean_text.split('\n\n')
-            section_sentiments = []
-            
-            for section in sections[:5]:
-                if len(section) > 50:
-                    sentiment = finbert_pipeline(section[:512])[0]
-                    section_sentiments.append({
-                        "section": section[:100] + "...",
-                        "sentiment": sentiment['label'],
-                        "score": sentiment['score']
-                    })
-            
-            # Overall sentiment
-            overall_sentiment = finbert_pipeline(clean_text[:512])[0]
-            
-            result["sentiment_analysis"] = {
-                "overall_sentiment": overall_sentiment['label'],
-                "confidence": overall_sentiment['score'],
-                "section_breakdown": section_sentiments,
-                "sentiment_score": overall_sentiment['score'] if overall_sentiment['label'] == 'positive' else 1 - overall_sentiment['score']
-            }
-            
-            # =========================================
-            # 9. PREDICTIVE INSIGHTS (GPT-2)
-            # =========================================
-            # =========================================
-# 9. PREDICTIVE INSIGHTS (Skipped - No disk space)
-# =========================================
-            print("🔮 Predictive Insights (Skipped - No disk space)...")
-            result["deep_learning_models_used"].append("GPT-2 (Skipped)")
-
-            result["predictive_insights"] = {
-            "gpt2_predictions": "Skipped due to disk space limitations",
-                "ai_generated_insights": self._generate_business_insights(clean_text, industry_result['labels'][0]) if 'clean_text' in locals() else []
-}
-            
-            # =========================================
-            # 10. RECOMMENDATIONS (BERT4Rec style)
-            # =========================================
-            print("🎯 Generating AI Recommendations...")
-            
-            recommendations = self._generate_recommendations(
-                industry_result['labels'][0],
-                tech_stack,
-                result["sentiment_analysis"]["sentiment_score"]
-            )
-            
-            result["recommendations"] = recommendations
-            
-            # =========================================
-            # 11. EMBEDDINGS (Sentence-BERT)
-            # =========================================
-            print("📦 Generating Semantic Embeddings...")
-            
-            # Generate embeddings for search
-            embeddings = sbert_model.encode(clean_text[:1000])
-            result["embeddings"] = embeddings.tolist()[:10]  # First 10 values
-            
-            # =========================================
-            # 12. CONFIDENCE SCORES
-            # =========================================
-            confidence_scores = {
-                "company_profile": min(0.95, len(organizations) / 10),
-                "contact_intelligence": min(0.95, (len(emails) + len(phones)) / 5),
-                "financial_intelligence": result["financial_intelligence"]["confidence"] if "confidence" in result["financial_intelligence"] else 0.5,
-                "people_discovery": min(0.95, len(people) / 15),
-                "technology_analysis": min(0.95, len(tech_stack) / 8),
-                "sentiment_analysis": overall_sentiment['score']
-            }
-            
-            result["confidence_scores"] = confidence_scores
-            result["overall_confidence"] = sum(confidence_scores.values()) / len(confidence_scores)
-            
-            # Processing time
-            end_time = time.time()
-            result["processing_time_seconds"] = round(end_time - start_time, 2)
-            
-        except Exception as e:
-            result["error"] = str(e)
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        return result
-    
-    def _find_contact_page(self, soup, base_url):
-        """Find contact page URL"""
-        contact_keywords = ['contact', 'about', 'support', 'help']
+        # Get all text
+        page_text = soup.get_text()
+        clean_text = ' '.join(page_text.split())[:2000]
+        
+        # =========================================
+        # BASIC INFO
+        # =========================================
+        title = soup.title.string if soup.title else "No title found"
+        
+        # Meta description
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc['content'] if meta_desc else ""
+        
+        # Meta keywords
+        meta_keys = soup.find('meta', attrs={'name': 'keywords'})
+        keywords = meta_keys['content'] if meta_keys else ""
+        
+        # =========================================
+        # SIMPLE ORGANIZATION EXTRACTION
+        # =========================================
+        orgs = []
+        words = clean_text.split()
+        for word in words:
+            if word and word[0].isupper() and len(word) > 2:
+                if any(term in word.lower() for term in ['inc', 'corp', 'ltd', 'co', 'tech', 'solutions', 'media', 'group']):
+                    orgs.append(word)
+        
+        # =========================================
+        # SIMPLE CLASSIFICATION
+        # =========================================
+        categories = {
+            "Technology": ["tech", "software", "app", "digital", "ai", "data", "computer", "cloud"],
+            "Business": ["business", "company", "corp", "inc", "enterprise", "ltd", "private"],
+            "E-commerce": ["shop", "store", "buy", "cart", "product", "price", "checkout", "order"],
+            "Education": ["school", "college", "university", "course", "learn", "education", "student"],
+            "News": ["news", "today", "breaking", "latest", "headline", "article", "press"],
+            "Social Media": ["facebook", "twitter", "instagram", "linkedin", "share", "post", "social"],
+            "Entertainment": ["watch", "movie", "video", "music", "game", "play", "stream"],
+            "Government": ["gov", "government", "official", "ministry", "public", "department"],
+            "Healthcare": ["health", "hospital", "clinic", "doctor", "medical", "care", "patient"]
+        }
+        
+        text_lower = clean_text.lower()
+        scores = {}
+        for cat, keywords in categories.items():
+            score = sum(1 for k in keywords if k in text_lower)
+            if score > 0:
+                scores[cat] = score
+        
+        if scores:
+            total = sum(scores.values())
+            sorted_items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            all_types = [(cat, score/total) for cat, score in sorted_items]
+            website_type = all_types[0][0]
+            type_conf = all_types[0][1]
+        else:
+            website_type = "General"
+            type_conf = 0.5
+            all_types = [("General", 0.5)]
+        
+        # =========================================
+        # EMAIL EXTRACTION
+        # =========================================
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        emails = list(set(re.findall(email_pattern, response.text)))
+        emails = [e for e in emails if not any(ext in e.lower() for ext in ['.png', '.jpg', '.css', '.js', '.svg'])]
+        
+        # =========================================
+        # PHONE EXTRACTION
+        # =========================================
+        phones = []
+        phone_patterns = [
+            r'\+?91[\s-]?[6-9]\d{9}',
+            r'0[6-9]\d{9}',
+            r'\d{5}[\s-]?\d{5}',
+            r'\(\d{3}\)[\s-]?\d{3}[\s-]?\d{4}'
+        ]
+        
+        for pattern in phone_patterns:
+            found = re.findall(pattern, response.text)
+            for f in found:
+                formatted = format_phone(f)
+                if formatted and formatted not in phones:
+                    phones.append(formatted)
+        
+        # =========================================
+        # ADDRESS EXTRACTION
+        # =========================================
+        address = None
+        addr_patterns = [
+            r'Plot No\.?\s*[\d,\-]+\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^-–—]+',
+            r'[A-Za-z0-9\s,]+(?:GIDC|Industrial Estate|Phase)[^,]+(?:Jamnagar|Gujarat)',
+            r'Address[:\s]+([^.\n]+(?:\.[^.\n]+)*)',
+            r'Located at[:\s]+([^.\n]+)'
+        ]
+        
+        for pattern in addr_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                address = match.group(0).strip()
+                break
+        
+        # =========================================
+        # SOCIAL MEDIA LINKS
+        # =========================================
+        social = {
+            'facebook': [],
+            'twitter': [],
+            'linkedin': [],
+            'instagram': [],
+            'youtube': []
+        }
+        
         for link in soup.find_all('a', href=True):
-            link_text = link.text.lower()
-            link_href = link['href'].lower()
-            for keyword in contact_keywords:
-                if keyword in link_text or keyword in link_href:
-                    return requests.compat.urljoin(base_url, link['href'])
+            href = link['href'].lower()
+            if 'facebook.com' in href:
+                social['facebook'].append(link['href'])
+            elif 'twitter.com' in href or 'x.com' in href:
+                social['twitter'].append(link['href'])
+            elif 'linkedin.com' in href:
+                social['linkedin'].append(link['href'])
+            elif 'instagram.com' in href:
+                social['instagram'].append(link['href'])
+            elif 'youtube.com' in href:
+                social['youtube'].append(link['href'])
+        
+        # =========================================
+        # BUSINESS HOURS
+        # =========================================
+        hours = None
+        hours_patterns = [
+            r'(?:Open|Hours|Timing)[:\s]+([^.\n]+)',
+            r'(\d{1,2}(?::\d{2})?\s*(?:AM|PM)\s*[–-]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM))'
+        ]
+        
+        for pattern in hours_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                hours = match.group(0).strip()
+                break
+        
+        # =========================================
+        # RATING
+        # =========================================
+        rating = None
+        rating_patterns = [
+            r'([4-5]\.[0-9])\s*[★✩⭐]',
+            r'Rating[:\s]+([0-9.]+)/5',
+            r'([0-9.]+)\s*out of\s*5'
+        ]
+        
+        for pattern in rating_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                rating = float(match.group(1))
+                break
+        
+        # =========================================
+        # REVIEWS COUNT
+        # =========================================
+        reviews = None
+        reviews_pattern = r'([0-9,]+)\s*(?:reviews?|Ratings?)'
+        match = re.search(reviews_pattern, page_text, re.I)
+        if match:
+            reviews = match.group(1)
+        
+        # =========================================
+        # WEBSITE TECHNOLOGY
+        # =========================================
+        tech_stack = []
+        tech_patterns = {
+            'WordPress': ['wp-content', 'wordpress'],
+            'Shopify': ['shopify'],
+            'WooCommerce': ['woocommerce'],
+            'React': ['react', 'reactjs'],
+            'Angular': ['angular', 'ng-'],
+            'Vue.js': ['vue'],
+            'Bootstrap': ['bootstrap'],
+            'jQuery': ['jquery'],
+            'PHP': ['.php'],
+            'Python': ['django', 'flask'],
+            'Node.js': ['node', 'express']
+        }
+        
+        html_content = response.text.lower()
+        for tech, patterns in tech_patterns.items():
+            if any(p in html_content for p in patterns):
+                tech_stack.append(tech)
+        
+        # Update history
+        st.session_state.history.append({
+            'url': url,
+            'title': title,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'type': website_type
+        })
+        st.session_state.analysis_count += 1
+        
+        return {
+            'basic': {
+                'title': title,
+                'description': description,
+                'keywords': keywords,
+                'url': url,
+                'word_count': len(page_text.split())
+            },
+            'entities': {
+                'orgs': list(set(orgs))[:10]
+            },
+            'classification': {
+                'website_type': website_type,
+                'confidence': type_conf,
+                'all_types': all_types
+            },
+            'contact': {
+                'emails': emails[:8],
+                'phones': phones[:8]
+            },
+            'business': {
+                'address': address,
+                'hours': hours,
+                'rating': rating,
+                'reviews': reviews
+            },
+            'social': {k: list(set(v))[:3] for k, v in social.items() if v},
+            'technology': tech_stack[:10]
+        }
+        
+    except Exception as e:
+        st.error(f"Error analyzing {url}: {str(e)}")
         return None
-    
-    def _detect_html_frameworks(self, soup):
-        """Detect HTML/CSS frameworks"""
-        frameworks = []
-        html = str(soup)
-        
-        if 'class="' in html:
-            if 'bootstrap' in html or 'col-md-' in html:
-                frameworks.append('Bootstrap')
-            if 'tailwind' in html or 'w-' in html:
-                frameworks.append('Tailwind CSS')
-            if 'foundation' in html:
-                frameworks.append('Foundation')
-        
-        return frameworks
-    
-    def _detect_analytics(self, html):
-        """Detect analytics tools"""
-        analytics = []
-        
-        if 'google-analytics' in html or 'ga(' in html or 'gtag' in html:
-            analytics.append('Google Analytics')
-        if 'facebook.com/tr' in html or 'fbq' in html:
-            analytics.append('Facebook Pixel')
-        if 'mixpanel' in html:
-            analytics.append('Mixpanel')
-        if 'hotjar' in html:
-            analytics.append('Hotjar')
-        
-        return analytics
-    
-    def _analyze_market_position(self, text):
-        """Analyze market positioning"""
-        position_keywords = {
-            'leader': ['leader', 'leading', 'number one', 'top'],
-            'innovator': ['innovative', 'innovation', 'cutting-edge', 'advanced'],
-            'enterprise': ['enterprise', 'corporate', 'business'],
-            'global': ['global', 'worldwide', 'international'],
-            'growing': ['growing', 'expanding', 'scaling']
-        }
-        
-        positions = []
-        for position, keywords in position_keywords.items():
-            if any(k in text.lower() for k in keywords):
-                positions.append(position)
-        
-        return positions if positions else ['Not specified']
-    
-    def _extract_strengths(self, text):
-        """Extract company strengths"""
-        strength_keywords = [
-            'experience', 'expertise', 'quality', 'reliable', 'trusted',
-            'award', 'certified', 'patented', 'innovative', 'efficient'
-        ]
-        
-        strengths = []
-        sentences = text.split('.')
-        for sent in sentences:
-            for keyword in strength_keywords:
-                if keyword in sent.lower() and len(sent) < 200:
-                    strengths.append(sent.strip())
-                    break
-        
-        return strengths[:8]
-    
-    def _extract_competitive_advantage(self, text):
-        """Extract competitive advantages"""
-        advantage_keywords = [
-            'faster', 'cheaper', 'better', 'easier', 'unique',
-            'exclusive', 'patented', 'proprietary', 'first'
-        ]
-        
-        advantages = []
-        sentences = text.split('.')
-        for sent in sentences:
-            for keyword in advantage_keywords:
-                if keyword in sent.lower() and len(sent) < 200:
-                    advantages.append(sent.strip())
-                    break
-        
-        return advantages[:5]
-    
-    def _generate_business_insights(self, text, industry):
-        """Generate business insights using rules + ML"""
-        insights = []
-        
-        # Length of text indicates content richness
-        if len(text) > 5000:
-            insights.append("📄 Rich content - company provides detailed information")
-        else:
-            insights.append("📄 Limited content - company may be smaller or less established")
-        
-        # Check for investor relations
-        if 'investor' in text.lower() or 'investors' in text.lower():
-            insights.append("💰 Public company or seeking investment - has investor relations")
-        
-        # Check for careers
-        if 'career' in text.lower() or 'jobs' in text.lower() or 'join us' in text.lower():
-            insights.append("👥 Actively hiring - company is growing")
-        
-        # Check for news/press
-        if 'news' in text.lower() or 'press' in text.lower() or 'blog' in text.lower():
-            insights.append("📰 Active in media - regularly publishes updates")
-        
-        return insights
-    
-    def _generate_recommendations(self, industry, tech_stack, sentiment_score):
-        """Generate AI recommendations based on analysis"""
-        recommendations = []
-        
-        # Industry-based recommendations
-        industry_recs = {
-            'Technology': [
-                "💡 Showcase technical expertise through case studies",
-                "🚀 Highlight innovation and R&D investments",
-                "🔧 Demonstrate product scalability and reliability"
-            ],
-            'Healthcare': [
-                "🏥 Emphasize patient outcomes and safety",
-                "🔬 Highlight clinical research and certifications",
-                "👨‍⚕️ Feature medical expert testimonials"
-            ],
-            'Finance': [
-                "💰 Emphasize security and compliance",
-                "📈 Showcase ROI and financial performance",
-                "🔒 Highlight data protection measures"
-            ],
-            'Retail': [
-                "🛍️ Highlight customer experience and satisfaction",
-                "📦 Showcase supply chain efficiency",
-                "🎯 Feature popular products and trends"
-            ]
-        }
-        
-        if industry in industry_recs:
-            recommendations.extend(industry_recs[industry])
-        else:
-            recommendations.append(f"🎯 Focus on your unique value in {industry} sector")
-        
-        # Tech stack recommendations
-        if tech_stack:
-            if 'React' in tech_stack:
-                recommendations.append("⚛️ Modern frontend - good user experience likely")
-            if 'AWS' in tech_stack or 'Azure' in tech_stack:
-                recommendations.append("☁️ Cloud infrastructure - scalable and reliable")
-        
-        # Sentiment-based recommendations
-        if sentiment_score > 0.8:
-            recommendations.append("📣 Leverage positive sentiment in marketing")
-        elif sentiment_score < 0.4:
-            recommendations.append("🔍 Address negative sentiment areas highlighted")
-        
-        return recommendations[:8]
-
 
 # =============================================
-# CREATE WEB INTERFACE
+# BEAUTIFUL UI
 # =============================================
+st.markdown("""
+<style>
+    .stApp {
+        background: #0A0F1F;
+    }
+    h1, h2, h3 {
+        color: #FFD700 !important;
+    }
+    .metric-box {
+        background: rgba(255,215,0,0.05);
+        border: 1px solid rgba(255,215,0,0.2);
+        border-radius: 10px;
+        padding: 1.2rem;
+        text-align: center;
+    }
+    .metric-number {
+        color: #FFD700;
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .info-box {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,215,0,0.1);
+        border-radius: 10px;
+        padding: 1.2rem;
+        margin: 0.5rem 0;
+    }
+    .tag {
+        background: rgba(255,215,0,0.1);
+        border: 1px solid rgba(255,215,0,0.3);
+        border-radius: 20px;
+        padding: 0.2rem 0.8rem;
+        display: inline-block;
+        margin: 0.2rem;
+        color: #FFD700;
+        font-size: 0.9rem;
+    }
+    .section-header {
+        color: #FFD700;
+        font-size: 1.3rem;
+        margin: 1.5rem 0 1rem 0;
+        border-bottom: 1px solid rgba(255,215,0,0.2);
+        padding-bottom: 0.3rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-def format_report(result):
-    """Format the deep learning results into markdown"""
+# Sidebar
+with st.sidebar:
+    st.markdown("# ✨ **AURORA**")
+    st.markdown("---")
+    st.success("⚡ FAST MODE ACTIVE")
+    menu = st.radio("Navigation", ["🔍 Analyze", "📊 Dashboard", "📚 History"])
+    st.markdown("---")
+    st.markdown(f"**Analyses:** {st.session_state.analysis_count}")
+    st.markdown(f"**Websites:** {len(st.session_state.history)}")
+
+# Main content
+if menu == "🔍 Analyze":
+    st.markdown("# ✨ Aurora Intelligence")
+    st.markdown("### Lightning Fast Website Analysis")
     
-    md = f"""
-# 🧠 MEGA DEEP LEARNING INTELLIGENCE REPORT
-
-## 📋 Executive Summary
-- **URL:** {result['url']}
-- **Processed:** {result['timestamp']}
-- **Processing Time:** {result.get('processing_time_seconds', 'N/A')} seconds
-- **Overall Confidence:** {result.get('overall_confidence', 0)*100:.1f}%
-- **Deep Learning Models Used:** {', '.join(result.get('deep_learning_models_used', ['N/A']))}
-
----
-
-## 1. 🏢 COMPANY PROFILE (BERT + RoBERTa)
-**Primary Industry:** {result['company_profile'].get('primary_industry', 'N/A')}
-**Confidence:** {result['company_profile'].get('industry_confidence', 0)*100:.1f}%
-
-**Detected Organizations:**
-"""
+    # Input
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        url = st.text_input("", placeholder="https://example.com", label_visibility="collapsed")
+    with col2:
+        analyze = st.button("✨ ANALYZE", use_container_width=True)
     
-    for org in result['company_profile'].get('detected_organizations', [])[:5]:
-        md += f"- {org}\n"
+    if analyze and url:
+        with st.spinner("Analyzing website..."):
+            data = extract_all_info(url)
+            
+            if data:
+                # Title
+                st.markdown(f"## {data['basic']['title']}")
+                st.caption(data['basic']['url'])
+                
+                if data['basic']['description']:
+                    st.markdown(f"*{data['basic']['description']}*")
+                
+                st.markdown("---")
+                
+                # Metrics Row
+                cols = st.columns(5)
+                metrics = [
+                    (data['basic']['word_count'], "Words"),
+                    (len(data['entities']['orgs']), "Organizations"),
+                    (len(data['contact']['emails']), "Emails"),
+                    (len(data['contact']['phones']), "Phones"),
+                    (len(data['technology']), "Technologies")
+                ]
+                
+                for col, (val, label) in zip(cols, metrics):
+                    with col:
+                        st.markdown(f"""
+                        <div class='metric-box'>
+                            <div class='metric-number'>{val}</div>
+                            <div>{label}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Classification
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### 🎯 Primary Category")
+                    st.markdown(f"## {data['classification']['website_type']}")
+                    st.progress(data['classification']['confidence'])
+                    st.markdown(f"Confidence: {data['classification']['confidence']*100:.1f}%")
+                
+                with col2:
+                    st.markdown("### 📊 All Categories")
+                    for cat, conf in data['classification']['all_types'][:5]:
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            st.markdown(cat)
+                        with c2:
+                            st.markdown(f"{conf*100:.1f}%")
+                        st.progress(conf)
+                
+                st.markdown("---")
+                
+                # Organizations
+                if data['entities']['orgs']:
+                    st.markdown("### 🏢 Organizations")
+                    cols = st.columns(4)
+                    for i, org in enumerate(data['entities']['orgs']):
+                        with cols[i % 4]:
+                            st.markdown(f"<span class='tag'>{org}</span>", unsafe_allow_html=True)
+                    st.markdown("---")
+                
+                # Business Information
+                if data['business']['address'] or data['business']['hours'] or data['business']['rating']:
+                    st.markdown("### 🏢 Business Information")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if data['business']['address']:
+                            st.markdown("**Address:**")
+                            st.markdown(f"<div class='info-box'>{data['business']['address']}</div>", unsafe_allow_html=True)
+                        
+                        if data['business']['hours']:
+                            st.markdown("**Hours:**")
+                            st.markdown(f"<div class='info-box'>{data['business']['hours']}</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        if data['business']['rating']:
+                            st.markdown("**Rating:**")
+                            stars = "⭐" * int(data['business']['rating'])
+                            st.markdown(f"<div class='info-box'>{stars} {data['business']['rating']}/5</div>", unsafe_allow_html=True)
+                        
+                        if data['business']['reviews']:
+                            st.markdown("**Reviews:**")
+                            st.markdown(f"<div class='info-box'>{data['business']['reviews']}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                
+                # Contact Information
+                if data['contact']['emails'] or data['contact']['phones']:
+                    st.markdown("### 📞 Contact")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if data['contact']['emails']:
+                            st.markdown("**Emails:**")
+                            for email in data['contact']['emails']:
+                                st.code(email)
+                    
+                    with col2:
+                        if data['contact']['phones']:
+                            st.markdown("**Phones:**")
+                            for phone in data['contact']['phones']:
+                                st.code(phone)
+                    st.markdown("---")
+                
+                # Social Media
+                if data['social']:
+                    st.markdown("### 🌐 Social Media")
+                    tabs = st.tabs(list(data['social'].keys()))
+                    for i, (platform, links) in enumerate(data['social'].items()):
+                        with tabs[i]:
+                            for link in links:
+                                st.markdown(f"- {link}")
+                    st.markdown("---")
+                
+                # Technology Stack
+                if data['technology']:
+                    st.markdown("### 🛠️ Technology Stack")
+                    cols = st.columns(4)
+                    for i, tech in enumerate(data['technology']):
+                        with cols[i % 4]:
+                            st.markdown(f"<span class='tag'>{tech}</span>", unsafe_allow_html=True)
+
+elif menu == "📊 Dashboard":
+    st.markdown("# 📊 Analytics Dashboard")
     
-    md += f"""
-**Detected Locations:**
-"""
-    for loc in result['company_profile'].get('detected_locations', [])[:3]:
-        md += f"- {loc}\n"
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=list(range(len(df))),
+                y=[1]*len(df),
+                mode='lines+markers',
+                line=dict(color='#FFD700', width=2),
+                marker=dict(size=8, color='#FFD700')
+            ))
+            fig.update_layout(
+                title="Analysis Timeline",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            cat_counts = df['type'].value_counts()
+            fig = go.Figure(data=[go.Pie(
+                labels=cat_counts.index,
+                values=cat_counts.values,
+                marker=dict(colors=['#FFD700', '#FFA500', '#FF8C00'])
+            )])
+            fig.update_layout(
+                title="Website Categories",
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Analyses", len(df))
+        with col2:
+            st.metric("Unique Websites", df['url'].nunique())
+        with col3:
+            st.metric("Top Category", df['type'].mode()[0] if not df.empty else "N/A")
+    else:
+        st.info("No analysis history yet")
+
+else:
+    st.markdown("# 📚 Analysis History")
     
-    md += f"""
-
-## 2. 📞 CONTACT INTELLIGENCE (LayoutLM + Flair)
-**Emails Found:**
-"""
-    for email in result['contact_intelligence'].get('emails', [])[:5]:
-        md += f"- {email}\n"
-    
-    md += f"""
-**Phones Found:**
-"""
-    for phone in result['contact_intelligence'].get('phones', [])[:3]:
-        md += f"- {phone}\n"
-    
-    if result['contact_intelligence'].get('contact_page'):
-        md += f"\n**Contact Page:** {result['contact_intelligence']['contact_page']}\n"
-    
-    md += f"""
-
-## 3. 💰 FINANCIAL INTELLIGENCE (FinBERT)
-**Financial Sentiment:** {result['financial_intelligence'].get('financial_sentiment', 'N/A')}
-**Confidence:** {result['financial_intelligence'].get('confidence', 0)*100:.1f}%
-
-## 4. 👥 PEOPLE DISCOVERY (SpanBERT + BiLSTM)
-**Total People Found:** {result['people_discovery'].get('total_people_found', 0)}
-
-**Leadership Team:**
-"""
-    for leader in result['people_discovery'].get('leadership_team', [])[:5]:
-        md += f"- {leader.get('role')}: {leader.get('person')}\n"
-    
-    md += f"""
-
-## 5. 🛠️ TECHNOLOGY ANALYSIS (CodeBERT)
-**Tech Stack:**
-"""
-    for tech in result['technology_analysis'].get('detected_technologies', [])[:8]:
-        md += f"- {tech}\n"
-    
-    md += f"""
-
-## 6. 📊 MARKET INTELLIGENCE (Longformer)
-**Market Position:** {', '.join(result['market_intelligence'].get('market_position', ['N/A']))}
-
-**Key Strengths:**
-"""
-    for strength in result['market_intelligence'].get('key_strengths', [])[:5]:
-        md += f"- {strength}\n"
-    
-    md += f"""
-
-## 7. 🤝 COMPETITOR ANALYSIS (Sentence-BERT)
-"""
-    for comp in result['competitor_analysis'].get('mentioned_competitors', [])[:5]:
-        md += f"- {comp}\n"
-    
-    md += f"""
-
-## 8. 😊 SENTIMENT ANALYSIS (DistilBERT + XLNet)
-**Overall Sentiment:** {result['sentiment_analysis'].get('overall_sentiment', 'N/A')}
-**Confidence:** {result['sentiment_analysis'].get('confidence', 0)*100:.1f}%
-
-## 9. 🔮 PREDICTIVE INSIGHTS (GPT-2)
-{result['predictive_insights'].get('gpt2_predictions', 'N/A')[:500]}
-
-## 10. 🎯 AI RECOMMENDATIONS
-"""
-    for rec in result.get('recommendations', [])[:6]:
-        md += f"- {rec}\n"
-    
-    md += f"""
-
-## 11. 📊 CONFIDENCE SCORES
-"""
-    for model, score in result.get('confidence_scores', {}).items():
-        md += f"- **{model}:** {score*100:.1f}%\n"
-    
-    md += f"""
-
----
-✅ **Report generated with 10+ Deep Learning Models**
-"""
-    
-    return md
-
-
-# Create the web interface
-def process_url(url):
-    extractor = DeepLearningWebsiteIntelligence()
-    result = extractor.extract_all(url)
-    return format_report(result)
-
-
-# Gradio Interface
-# Gradio Interface
-interface = gr.Interface(
-    fn=process_url,
-    inputs=gr.Textbox(
-        label="Enter Website URL",
-        placeholder="https://example.com",
-        lines=1
-    ),
-    outputs=gr.Markdown(label="Deep Learning Intelligence Report"),
-    title="🧠 MEGA DEEP LEARNING WEBSITE INTELLIGENCE",
-    description="10+ Deep Learning Models analyzing any website in real-time",
-    examples=[
-        ["https://www.microsoft.com"],
-        ["https://www.tesla.com"],
-        ["https://www.starbucks.com"],
-        ["https://www.openai.com"]
-    ],
-    theme="dark"
-)
-
-print("\n" + "=" * 60)
-print("🚀 STARTING MEGA DEEP LEARNING WEB APP")
-print("📱 App will launch in your browser")
-print("=" * 60)
-
-interface.launch(share=False, server_name='127.0.0.1')
+    if st.session_state.history:
+        for item in reversed(st.session_state.history[-20:]):
+            with st.container():
+                st.markdown(f"### {item['title']}")
+                st.markdown(f"**URL:** {item['url']}")
+                st.markdown(f"**Time:** {item['timestamp']}  |  **Type:** {item['type']}")
+                st.markdown("---")
+    else:
+        st.info("No history yet")
