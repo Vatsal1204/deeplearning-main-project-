@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+requests
+beautifulsoup4
+plotly
+transformers
+torch
+torchvision
+torchaudio
