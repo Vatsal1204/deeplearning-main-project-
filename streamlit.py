@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 import plotly.graph_objects as go
 import plotly.express as px
+from urllib.parse import urlparse, urljoin
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -26,103 +27,212 @@ if 'analysis_count' not in st.session_state:
     st.session_state.analysis_count = 0
 
 # =============================================
-# SAMPLE DATA FOR INSTANT RESULTS
+# REAL EXTRACTION FUNCTIONS
 # =============================================
-SAMPLE_DATA = {
-    'google.com': {
-        'title': 'Google',
-        'description': 'Search the world\'s information, including webpages, images, videos and more.',
-        'type': 'Technology',
-        'emails': ['support@google.com', 'press@google.com'],
-        'phones': ['+1 650-253-0000'],
-        'social': ['https://facebook.com/Google', 'https://twitter.com/Google', 'https://linkedin.com/company/google'],
-        'address': '1600 Amphitheatre Parkway, Mountain View, CA 94043',
-        'rating': 4.8
-    },
-    'github.com': {
-        'title': 'GitHub: Let\'s build from here',
-        'description': 'GitHub is where over 100 million developers shape the future of software.',
-        'type': 'Technology',
-        'emails': ['support@github.com'],
-        'phones': [],
-        'social': ['https://twitter.com/github', 'https://linkedin.com/company/github'],
-        'address': 'San Francisco, CA',
-        'rating': 4.9
-    },
-    'netflix.com': {
-        'title': 'Netflix - Watch TV Shows Online, Watch Movies Online',
-        'description': 'Watch Netflix movies & TV shows online or stream right to your smart TV.',
-        'type': 'Entertainment',
-        'emails': ['info@netflix.com'],
-        'phones': ['+1-888-638-3549'],
-        'social': ['https://facebook.com/netflix', 'https://twitter.com/netflix'],
-        'address': 'Los Gatos, California',
-        'rating': 4.5
-    },
-    'default': {
-        'title': 'Website Analysis Result',
-        'description': 'Sample data for quick preview. The actual website may be slow or blocking requests.',
-        'type': 'General',
-        'emails': ['contact@example.com', 'info@example.com'],
-        'phones': ['+91 98765 43210', '+91 12345 67890'],
-        'social': ['https://facebook.com/example', 'https://twitter.com/example'],
-        'address': 'Sample Address, City - 123456',
-        'rating': 4.0
-    }
-}
+def format_phone(phone):
+    """Format phone to Indian format"""
+    digits = re.sub(r'\D', '', str(phone))
+    if len(digits) == 10 and digits[0] in ['6','7','8','9']:
+        return f"+91 {digits[:5]} {digits[5:]}"
+    elif len(digits) == 11 and digits.startswith('0'):
+        return f"+91 {digits[1:6]} {digits[6:]}"
+    elif len(digits) == 12 and digits.startswith('91'):
+        return f"+91 {digits[2:7]} {digits[7:]}"
+    elif len(digits) > 10:
+        return f"+91 {digits[-10:-5]} {digits[-5:]}"
+    return None
 
-def get_sample_data(url):
-    """Get sample data instantly"""
-    for key in SAMPLE_DATA:
-        if key in url:
-            return SAMPLE_DATA[key]
-    return SAMPLE_DATA['default']
-
-def extract_fast(url):
-    """Extract data with 2 second timeout max"""
+def extract_real_data(url):
+    """Extract REAL data from website"""
     
-    # Show loading message
-    with st.status("🔄 Analyzing...", expanded=True) as status:
-        status.write("🌐 Connecting...")
-        time.sleep(0.5)
+    try:
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
         
-        # Check if it's a known site for sample data
-        status.write("📊 Processing...")
-        time.sleep(0.5)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+        }
         
-        # Get sample data
-        data = get_sample_data(url)
+        # Show progress
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        status.write("✅ Complete!")
+        status_text.text("🌐 Connecting to website...")
+        progress_bar.progress(20)
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        status_text.text("📄 Parsing HTML...")
+        progress_bar.progress(40)
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Get all text
+        page_text = soup.get_text()
+        clean_text = ' '.join(page_text.split())[:3000]
+        
+        status_text.text("🔍 Extracting information...")
+        progress_bar.progress(60)
+        
+        # =========================================
+        # BASIC INFO
+        # =========================================
+        title = soup.title.string if soup.title else url
+        
+        # Meta description
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc['content'] if meta_desc else ""
+        
+        # =========================================
+        # EMAIL EXTRACTION - REAL
+        # =========================================
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        emails = list(set(re.findall(email_pattern, response.text)))
+        emails = [e for e in emails if not any(ext in e.lower() for ext in ['.png', '.jpg', '.css', '.js', '.svg'])]
+        
+        # =========================================
+        # PHONE EXTRACTION - REAL
+        # =========================================
+        phone_patterns = [
+            r'\+?91[\s-]?[6-9]\d{9}',
+            r'0[6-9]\d{9}',
+            r'\d{5}[\s-]?\d{5}',
+            r'\(\d{3}\)[\s-]?\d{3}[\s-]?\d{4}',
+            r'\d{10}'
+        ]
+        
+        phones = []
+        for pattern in phone_patterns:
+            found = re.findall(pattern, response.text)
+            for f in found:
+                formatted = format_phone(f)
+                if formatted and formatted not in phones:
+                    phones.append(formatted)
+        
+        # =========================================
+        # ADDRESS EXTRACTION - REAL
+        # =========================================
+        address = None
+        addr_patterns = [
+            r'Plot No\.?\s*[\d,\-]+\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^-–—]+',
+            r'[A-Za-z0-9\s,]+(?:GIDC|Industrial Estate|Phase)[^,]+(?:Jamnagar|Gujarat|Mumbai|Delhi|Bangalore)',
+            r'Address[:\s]+([^.\n]+(?:\.[^.\n]+)*)',
+            r'Located at[:\s]+([^.\n]+)'
+        ]
+        
+        for pattern in addr_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                address = match.group(0).strip()
+                break
+        
+        # =========================================
+        # SOCIAL MEDIA LINKS - REAL
+        # =========================================
+        social = []
+        for link in soup.find_all('a', href=True):
+            href = link['href'].lower()
+            if any(d in href for d in ['facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com', 'youtube.com']):
+                full_url = urljoin(url, link['href'])
+                social.append(full_url)
+        
+        # =========================================
+        # RATING EXTRACTION - REAL
+        # =========================================
+        rating = None
+        rating_patterns = [
+            r'([4-5]\.[0-9])\s*[★✩⭐]',
+            r'Rating[:\s]+([0-9.]+)/5',
+            r'([0-9.]+)\s*out of\s*5'
+        ]
+        
+        for pattern in rating_patterns:
+            match = re.search(pattern, page_text, re.I)
+            if match:
+                try:
+                    rating = float(match.group(1))
+                except:
+                    pass
+                break
+        
+        # =========================================
+        # CLASSIFICATION
+        # =========================================
+        categories = {
+            "Technology": ["tech", "software", "app", "digital", "ai", "data", "computer", "cloud"],
+            "Business": ["business", "company", "corp", "inc", "enterprise", "ltd", "private"],
+            "E-commerce": ["shop", "store", "buy", "cart", "product", "price", "order", "checkout"],
+            "Education": ["school", "college", "university", "course", "learn", "education", "student"],
+            "News": ["news", "today", "breaking", "latest", "headline", "article", "press"],
+            "Social Media": ["facebook", "twitter", "instagram", "linkedin", "share", "post"],
+            "Entertainment": ["watch", "movie", "video", "music", "game", "play", "stream"],
+            "Government": ["gov", "government", "official", "ministry", "public"],
+            "Healthcare": ["health", "hospital", "clinic", "doctor", "medical", "care"]
+        }
+        
+        text_lower = clean_text.lower()
+        scores = {}
+        for cat, keywords in categories.items():
+            score = sum(1 for k in keywords if k in text_lower)
+            if score > 0:
+                scores[cat] = score
+        
+        if scores:
+            total = sum(scores.values())
+            sorted_items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            all_types = [(cat, score/total) for cat, score in sorted_items]
+            website_type = all_types[0][0]
+            type_conf = all_types[0][1]
+        else:
+            website_type = "General"
+            type_conf = 0.5
+            all_types = [("General", 0.5)]
+        
+        progress_bar.progress(100)
+        status_text.text("✅ Analysis complete!")
         time.sleep(0.5)
-        status.update(label="✅ Analysis complete!", state="complete")
-    
-    # Add to history
-    st.session_state.history.append({
-        'url': url,
-        'title': data['title'],
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'type': data['type']
-    })
-    st.session_state.analysis_count += 1
-    
-    return {
-        'title': data['title'],
-        'description': data['description'],
-        'url': url,
-        'word_count': 250,
-        'type': data['type'],
-        'type_conf': 0.85,
-        'all_types': [(data['type'], 0.85), ("General", 0.10), ("Business", 0.05)],
-        'emails': data['emails'],
-        'phones': data['phones'],
-        'social': data['social'],
-        'address': data['address'],
-        'rating': data['rating']
-    }
+        progress_bar.empty()
+        status_text.empty()
+        
+        # Update history
+        st.session_state.history.append({
+            'url': url,
+            'title': title[:50],
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'type': website_type
+        })
+        st.session_state.analysis_count += 1
+        
+        return {
+            'title': title,
+            'description': description[:300],
+            'url': url,
+            'word_count': len(page_text.split()),
+            'type': website_type,
+            'type_conf': type_conf,
+            'all_types': all_types,
+            'emails': emails[:5],
+            'phones': phones[:5],
+            'social': list(set(social))[:5],
+            'address': address,
+            'rating': rating
+        }
+        
+    except requests.exceptions.Timeout:
+        st.error("⏱️ Website took too long to respond. Try another site.")
+        return None
+    except requests.exceptions.ConnectionError:
+        st.error("🔌 Could not connect to website. Check the URL.")
+        return None
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        return None
 
 # =============================================
-# BEAUTIFUL UI
+# UI
 # =============================================
 st.markdown("""
 <style>
@@ -138,11 +248,6 @@ st.markdown("""
         border-radius: 10px;
         padding: 1.2rem;
         text-align: center;
-        transition: all 0.3s ease;
-    }
-    .metric-box:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(255,215,0,0.2);
     }
     .metric-number {
         color: #FFD700;
@@ -164,10 +269,6 @@ st.markdown("""
         display: inline-block;
         margin: 0.2rem;
         color: #FFD700;
-        cursor: pointer;
-    }
-    .tag:hover {
-        background: rgba(255,215,0,0.2);
     }
     .section-header {
         color: #FFD700;
@@ -184,251 +285,120 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .hero h1 {
-        font-size: 3rem;
-        margin-bottom: 0.5rem;
-    }
-    .stButton button {
-        background: linear-gradient(135deg, #FFD700, #FFA500);
-        color: #0A0F1F;
-        font-weight: bold;
-        border: none;
-    }
-    .stButton button:hover {
-        background: linear-gradient(135deg, #FFA500, #FFD700);
-        color: #0A0F1F;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
-    st.markdown("""
-    <div style='text-align: center; padding: 1rem;'>
-        <h1 style='color: #FFD700; font-size: 2rem;'>✨ AURORA</h1>
-        <p style='color: #666;'>Intelligence Platform</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
+    st.markdown("<h1 style='color: #FFD700;'>✨ AURORA</h1>", unsafe_allow_html=True)
     menu = st.radio("Navigation", ["🔍 Analyze", "📊 Dashboard", "📚 History"])
-    
     st.markdown("---")
-    
-    # Stats in sidebar
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"<p style='font-size: 1.5rem; color: #FFD700;'>{st.session_state.analysis_count}</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #666;'>Analyses</p>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<p style='font-size: 1.5rem; color: #FFD700;'>{len(st.session_state.history)}</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #666;'>Websites</p>", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.success("⚡ Ultra-Fast Mode")
+    st.markdown(f"**Analyses:** {st.session_state.analysis_count}")
+    st.markdown(f"**Websites:** {len(st.session_state.history)}")
 
 # Main content
 if menu == "🔍 Analyze":
     st.markdown("""
     <div class='hero'>
         <h1>✨ Aurora Intelligence</h1>
-        <p style='color: #aaa;'>Instant Website Analysis - Results in 2 Seconds</p>
+        <p style='color: #aaa;'>Real Website Data Extraction</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Input
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        url = st.text_input("", placeholder="Enter any website URL (e.g., google.com)", label_visibility="collapsed")
-    with col2:
-        analyze = st.button("🔍 ANALYZE NOW", use_container_width=True)
+    url = st.text_input("", placeholder="https://example.com", label_visibility="collapsed")
     
-    # Quick examples with clickable tags
-    st.markdown("""
-    <div style='text-align: center; margin: 1rem 0;'>
-        <p style='color: #aaa; margin-bottom: 0.5rem;'>Try these examples:</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("🌐 Google", use_container_width=True):
-            url = "google.com"
-            analyze = True
-    with col2:
-        if st.button("🌐 GitHub", use_container_width=True):
-            url = "github.com"
-            analyze = True
-    with col3:
-        if st.button("🌐 Netflix", use_container_width=True):
-            url = "netflix.com"
-            analyze = True
-    with col4:
-        if st.button("🌐 JustDial", use_container_width=True):
-            url = "justdial.com"
-            analyze = True
-    
-    if analyze and url:
-        # Get data instantly (never waits more than 2 seconds)
-        data = extract_fast(url)
-        
-        if data:
-            # Title
-            st.markdown(f"<h2 style='color: white; margin-top: 2rem;'>{data['title']}</h2>", unsafe_allow_html=True)
-            st.caption(f"🔗 {data['url']}")
+    if st.button("🔍 ANALYZE", use_container_width=True):
+        if url:
+            data = extract_real_data(url)
             
-            if data['description']:
-                st.markdown(f"<p style='color: #aaa;'>{data['description']}</p>", unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Metrics Row
-            cols = st.columns(4)
-            metrics = [
-                (data['word_count'], "Words"),
-                (len(data['emails']), "Emails"),
-                (len(data['phones']), "Phones"),
-                (len(data['social']), "Social")
-            ]
-            
-            for col, (val, label) in zip(cols, metrics):
-                with col:
-                    st.markdown(f"""
-                    <div class='metric-box'>
-                        <div class='metric-number'>{val}</div>
-                        <div style='color: #aaa;'>{label}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Classification
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 🎯 Primary Category")
-                st.markdown(f"<h2 style='color: white;'>{data['type']}</h2>", unsafe_allow_html=True)
-                st.progress(data['type_conf'])
-                st.markdown(f"Confidence: {data['type_conf']*100:.1f}%")
-            
-            with col2:
-                st.markdown("### 📊 All Categories")
-                for cat, conf in data['all_types']:
-                    cols = st.columns([3, 1])
-                    with cols[0]:
-                        st.markdown(f"<span style='color: white;'>{cat}</span>", unsafe_allow_html=True)
-                    with cols[1]:
-                        st.markdown(f"<span style='color: #FFD700;'>{conf*100:.1f}%</span>", unsafe_allow_html=True)
-                    st.progress(conf)
-            
-            st.markdown("---")
-            
-            # Address
-            if data['address']:
-                st.markdown("### 📍 Address")
-                st.markdown(f"<div class='info-box'>{data['address']}</div>", unsafe_allow_html=True)
+            if data:
+                st.markdown(f"<h2 style='color: white;'>{data['title']}</h2>", unsafe_allow_html=True)
+                st.caption(data['url'])
+                
+                if data['description']:
+                    st.markdown(f"<p style='color: #aaa;'>{data['description']}</p>", unsafe_allow_html=True)
+                
                 st.markdown("---")
-            
-            # Rating
-            if data['rating']:
-                st.markdown("### ⭐ Rating")
-                stars = "⭐" * int(data['rating'])
-                st.markdown(f"<div class='info-box'>{stars} {data['rating']}/5</div>", unsafe_allow_html=True)
+                
+                # Metrics
+                cols = st.columns(4)
+                metrics = [
+                    (data['word_count'], "Words"),
+                    (len(data['emails']), "Emails"),
+                    (len(data['phones']), "Phones"),
+                    (len(data['social']), "Social")
+                ]
+                
+                for col, (val, label) in zip(cols, metrics):
+                    with col:
+                        st.markdown(f"""
+                        <div class='metric-box'>
+                            <div class='metric-number'>{val}</div>
+                            <div style='color: #aaa;'>{label}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
                 st.markdown("---")
-            
-            # Contact
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if data['emails']:
-                    st.markdown("### 📧 Email Addresses")
-                    for email in data['emails']:
-                        st.code(email)
-            
-            with col2:
-                if data['phones']:
-                    st.markdown("### 📱 Phone Numbers")
-                    for phone in data['phones']:
-                        st.code(phone)
-            
-            if data['emails'] or data['phones']:
+                
+                # Classification
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("### 🎯 Category")
+                    st.markdown(f"## {data['type']}")
+                    st.progress(data['type_conf'])
+                with col2:
+                    st.markdown("### 📊 All Categories")
+                    for cat, conf in data['all_types']:
+                        cols = st.columns([3, 1])
+                        with cols[0]:
+                            st.markdown(cat)
+                        with cols[1]:
+                            st.markdown(f"{conf*100:.1f}%")
+                        st.progress(conf)
+                
                 st.markdown("---")
-            
-            # Social
-            if data['social']:
-                st.markdown("### 🌐 Social Media Links")
-                for link in data['social']:
-                    st.markdown(f"- {link}")
+                
+                # Address
+                if data['address']:
+                    st.markdown("### 📍 Address")
+                    st.markdown(f"<div class='info-box'>{data['address']}</div>", unsafe_allow_html=True)
+                    st.markdown("---")
+                
+                # Contact
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if data['emails']:
+                        st.markdown("### 📧 Emails")
+                        for email in data['emails']:
+                            st.code(email)
+                
+                with col2:
+                    if data['phones']:
+                        st.markdown("### 📱 Phones")
+                        for phone in data['phones']:
+                            st.code(phone)
+                
+                # Social
+                if data['social']:
+                    st.markdown("### 🌐 Social")
+                    for link in data['social']:
+                        st.markdown(f"- {link}")
 
 elif menu == "📊 Dashboard":
-    st.markdown("# 📊 Analytics Dashboard")
-    
+    st.markdown("# 📊 Dashboard")
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=list(range(len(df))),
-                y=[1]*len(df),
-                mode='lines+markers',
-                line=dict(color='#FFD700', width=2),
-                marker=dict(size=8, color='#FFD700')
-            ))
-            fig.update_layout(
-                title="Analysis Timeline",
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white'),
-                xaxis_title="Analysis #",
-                yaxis_title=""
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            cat_counts = df['type'].value_counts()
-            fig = go.Figure(data=[go.Pie(
-                labels=cat_counts.index,
-                values=cat_counts.values,
-                marker=dict(colors=['#FFD700', '#FFA500', '#FF8C00'])
-            )])
-            fig.update_layout(
-                title="Website Categories",
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white')
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        st.markdown("---")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Analyses", len(df))
-        with col2:
-            st.metric("Unique Websites", df['url'].nunique())
-        with col3:
-            st.metric("Most Common", df['type'].mode()[0] if not df.empty else "N/A")
-    else:
-        st.info("No analysis history yet. Try analyzing some websites!")
-
-else:  # History
-    st.markdown("# 📚 Analysis History")
-    
-    if st.session_state.history:
-        for item in reversed(st.session_state.history[-20:]):
-            with st.container():
-                st.markdown(f"### {item['title']}")
-                st.markdown(f"**URL:** {item['url']}")
-                st.markdown(f"**Time:** {item['timestamp']}  |  **Type:** {item['type']}")
-                st.markdown("---")
+        st.dataframe(df)
     else:
         st.info("No history yet")
 
-# Footer
-st.markdown("""
-<div style='text-align: center; margin-top: 3rem; color: #333;'>
-    ✨ Instant Analysis • Results in 2 Seconds • No Waiting
-</div>
-""", unsafe_allow_html=True)
+else:
+    st.markdown("# 📚 History")
+    if st.session_state.history:
+        for item in reversed(st.session_state.history[-10:]):
+            st.markdown(f"**{item['title']}** - {item['type']}")
+            st.caption(item['url'])
+            st.markdown("---")
+    else:
+        st.info("No history yet")
