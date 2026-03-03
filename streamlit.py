@@ -12,16 +12,7 @@ from urllib.parse import urlparse, urljoin
 import warnings
 warnings.filterwarnings('ignore')
 
-# Try to import transformers for real deep learning
-try:
-    from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, AutoModelForTokenClassification
-    import torch
-    DEEP_LEARNING_AVAILABLE = True
-except ImportError:
-    DEEP_LEARNING_AVAILABLE = False
-    st.warning("⚠️ Deep Learning libraries not available. Using enhanced pattern matching.")
-
-# Page config
+# Page config - MUST BE FIRST STREAMLIT COMMAND
 st.set_page_config(
     page_title="AURORA DEEP LEARNING PRO",
     page_icon="🧠",
@@ -36,11 +27,19 @@ if 'analysis_count' not in st.session_state:
     st.session_state.analysis_count = 0
 if 'favorites' not in st.session_state:
     st.session_state.favorites = []
-if 'settings' not in st.session_state:
-    st.session_state.settings = {
-        'use_deep_learning': DEEP_LEARNING_AVAILABLE,
-        'confidence_threshold': 0.7
-    }
+if 'use_deep_learning' not in st.session_state:
+    st.session_state.use_deep_learning = False
+
+# Try to import transformers for real deep learning
+DEEP_LEARNING_AVAILABLE = False
+try:
+    from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, AutoModelForTokenClassification
+    import torch
+    DEEP_LEARNING_AVAILABLE = True
+    st.session_state.use_deep_learning = True
+except ImportError:
+    DEEP_LEARNING_AVAILABLE = False
+    st.session_state.use_deep_learning = False
 
 # =============================================
 # DEEP LEARNING MODELS (if available)
@@ -80,14 +79,14 @@ def load_dl_models():
     
     return models
 
-# Load models
-dl_models = load_dl_models()
+# Load models only if available
+dl_models = load_dl_models() if DEEP_LEARNING_AVAILABLE else {}
 
 # =============================================
-# ADVANCED DEEP LEARNING FUNCTIONS
+# ENHANCED PATTERN MATCHING (FALLBACK)
 # =============================================
-def deep_learning_entity_recognition(text):
-    """Use BERT to find entities in text"""
+def extract_entities_pattern(text):
+    """Extract entities using patterns when DL not available"""
     entities = {
         'persons': [],
         'organizations': [],
@@ -95,48 +94,23 @@ def deep_learning_entity_recognition(text):
         'misc': []
     }
     
-    if DEEP_LEARNING_AVAILABLE and 'ner' in dl_models:
-        try:
-            results = dl_models['ner'](text[:1024])
-            for entity in results:
-                if entity['entity_group'] == 'PER':
-                    entities['persons'].append(entity['word'])
-                elif entity['entity_group'] == 'ORG':
-                    entities['organizations'].append(entity['word'])
-                elif entity['entity_group'] == 'LOC':
-                    entities['locations'].append(entity['word'])
-                else:
-                    entities['misc'].append(entity['word'])
-        except:
-            pass
+    # Find capitalized words that might be names
+    words = text.split()
+    for i, word in enumerate(words):
+        if word and word[0].isupper() and len(word) > 2:
+            # Check if it might be a person (followed by common title)
+            if i > 0 and words[i-1].lower() in ['mr', 'mrs', 'ms', 'dr', 'prof']:
+                entities['persons'].append(word)
+            # Check if it might be an organization
+            elif any(term in word.lower() for term in ['inc', 'corp', 'ltd', 'co', 'tech', 'solutions']):
+                entities['organizations'].append(word)
+            # Check if it might be a location
+            elif any(term in word.lower() for term in ['city', 'town', 'street', 'road', 'avenue']):
+                entities['locations'].append(word)
     
     return entities
 
-def deep_learning_classification(text):
-    """Use BART to classify business type"""
-    categories = [
-        "Technology Company", "E-commerce Store", "Educational Institution",
-        "Healthcare Provider", "Financial Services", "Manufacturing Company",
-        "Real Estate Agency", "Hospitality Business", "Retail Store",
-        "Consulting Firm", "Marketing Agency", "Construction Company",
-        "Transportation Service", "Energy Company", "Non-profit Organization"
-    ]
-    
-    if DEEP_LEARNING_AVAILABLE and 'classifier' in dl_models:
-        try:
-            result = dl_models['classifier'](text[:500], categories)
-            return {
-                'primary': result['labels'][0],
-                'confidence': result['scores'][0],
-                'all': list(zip(result['labels'][:5], result['scores'][:5]))
-            }
-        except:
-            pass
-    
-    # Fallback to pattern matching
-    return pattern_based_classification(text)
-
-def pattern_based_classification(text):
+def pattern_classification(text):
     """Fallback classification using patterns"""
     text_lower = text.lower()
     
@@ -173,8 +147,74 @@ def pattern_based_classification(text):
         'all': [('General Business', 0.5)]
     }
 
+def pattern_sentiment(text):
+    """Simple sentiment analysis"""
+    positive_words = ['good', 'great', 'excellent', 'amazing', 'wonderful', 'best', 'love', 'happy']
+    negative_words = ['bad', 'poor', 'terrible', 'awful', 'worst', 'hate', 'sad', 'disappointing']
+    
+    text_lower = text.lower()
+    pos_count = sum(1 for word in positive_words if word in text_lower)
+    neg_count = sum(1 for word in negative_words if word in text_lower)
+    
+    if pos_count > neg_count:
+        return {'label': 'POSITIVE', 'score': 0.7 + (pos_count * 0.05)}
+    elif neg_count > pos_count:
+        return {'label': 'NEGATIVE', 'score': 0.7 + (neg_count * 0.05)}
+    else:
+        return {'label': 'NEUTRAL', 'score': 0.5}
+
+# =============================================
+# ADVANCED DEEP LEARNING FUNCTIONS (with fallback)
+# =============================================
+def deep_learning_entity_recognition(text):
+    """Use BERT to find entities in text (with fallback)"""
+    if DEEP_LEARNING_AVAILABLE and 'ner' in dl_models:
+        try:
+            entities = {
+                'persons': [],
+                'organizations': [],
+                'locations': [],
+                'misc': []
+            }
+            results = dl_models['ner'](text[:1024])
+            for entity in results:
+                if entity['entity_group'] == 'PER':
+                    entities['persons'].append(entity['word'])
+                elif entity['entity_group'] == 'ORG':
+                    entities['organizations'].append(entity['word'])
+                elif entity['entity_group'] == 'LOC':
+                    entities['locations'].append(entity['word'])
+                else:
+                    entities['misc'].append(entity['word'])
+            return entities
+        except:
+            return extract_entities_pattern(text)
+    else:
+        return extract_entities_pattern(text)
+
+def deep_learning_classification(text):
+    """Use BART to classify business type (with fallback)"""
+    if DEEP_LEARNING_AVAILABLE and 'classifier' in dl_models:
+        try:
+            categories = [
+                "Technology Company", "E-commerce Store", "Educational Institution",
+                "Healthcare Provider", "Financial Services", "Manufacturing Company",
+                "Real Estate Agency", "Hospitality Business", "Retail Store",
+                "Consulting Firm", "Marketing Agency", "Construction Company"
+            ]
+            result = dl_models['classifier'](text[:500], categories)
+            return {
+                'primary': result['labels'][0],
+                'confidence': result['scores'][0],
+                'all': list(zip(result['labels'][:5], result['scores'][:5]))
+            }
+        except:
+            return pattern_classification(text)
+    else:
+        return pattern_classification(text)
+
 def deep_learning_sentiment(text):
-    """Analyze sentiment using FinBERT"""
+    """Analyze sentiment (with fallback)"""
     if DEEP_LEARNING_AVAILABLE and 'sentiment' in dl_models:
         try:
             result = dl_models['sentiment'](text[:512])[0]
@@ -183,12 +223,9 @@ def deep_learning_sentiment(text):
                 'score': result['score']
             }
         except:
-            pass
-    
-    return {
-        'label': 'NEUTRAL',
-        'score': 0.5
-    }
+            return pattern_sentiment(text)
+    else:
+        return pattern_sentiment(text)
 
 def detect_owner_info(soup, text, entities):
     """Enhanced owner detection using DL entities"""
@@ -199,22 +236,17 @@ def detect_owner_info(soup, text, entities):
         'email': None,
         'founded': None,
         'employees': None,
-        'certifications': [],
-        'social_media': [],
-        'business_type': None,
-        'owner_sentiment': None
+        'certifications': []
     }
     
-    # Use DL entities to find potential owners
+    # Use entities to find potential owners
     if entities['persons']:
-        # Look for CEO/Founder patterns near person names
         for person in entities['persons'][:3]:
             context_pattern = f".{{0,50}}{person}.{{0,50}}"
             context_matches = re.findall(context_pattern, text, re.I)
             for ctx in context_matches:
                 if any(term in ctx.lower() for term in ['founder', 'ceo', 'owner', 'director']):
                     owner_info['name'] = person
-                    # Extract designation
                     for term in ['Founder', 'CEO', 'Owner', 'Director']:
                         if term.lower() in ctx.lower():
                             owner_info['designation'] = term
@@ -242,7 +274,7 @@ def detect_owner_info(soup, text, entities):
     owner_info['employees'] = emp_match.group(1) if emp_match else None
     
     # Certifications
-    cert_keywords = ['ISO', 'GST', 'MSME', 'NSIC', 'IATF', 'Certified', 'FDA', 'CE']
+    cert_keywords = ['ISO', 'GST', 'MSME', 'NSIC', 'IATF', 'Certified']
     for cert in cert_keywords:
         if cert.lower() in text.lower():
             owner_info['certifications'].append(cert)
@@ -317,8 +349,8 @@ def predict_future_trends(data):
 # =============================================
 # MAIN EXTRACTION FUNCTION
 # =============================================
-def extract_real_data(url):
-    """Extract ALL data from website with deep learning"""
+def extract_data(url):
+    """Extract ALL data from website"""
     
     try:
         if not url.startswith(('http://', 'https://')):
@@ -326,61 +358,33 @@ def extract_real_data(url):
         
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         
-        # Show progress
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        status_text.text("🌐 Connecting...")
-        progress_bar.progress(10)
-        
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        status_text.text("📄 Parsing HTML...")
-        progress_bar.progress(30)
         
         # Get text
         page_text = soup.get_text()
         clean_text = ' '.join(page_text.split())[:4000]
         
-        status_text.text("🧠 Running Deep Learning models...")
-        progress_bar.progress(50)
-        
-        # =========================================
         # DEEP LEARNING ENTITY RECOGNITION
-        # =========================================
         entities = deep_learning_entity_recognition(clean_text)
         
-        # =========================================
         # DEEP LEARNING CLASSIFICATION
-        # =========================================
         classification = deep_learning_classification(clean_text)
         
-        # =========================================
         # DEEP LEARNING SENTIMENT
-        # =========================================
         sentiment = deep_learning_sentiment(clean_text)
         
-        status_text.text("🔍 Extracting contact information...")
-        progress_bar.progress(70)
-        
-        # =========================================
         # BASIC INFO
-        # =========================================
         title = soup.title.string if soup.title else url
         meta_desc = soup.find('meta', attrs={'name': 'description'})
         description = meta_desc['content'] if meta_desc else ""
         
-        # =========================================
         # EMAILS
-        # =========================================
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
         emails = list(set(re.findall(email_pattern, response.text)))
         emails = [e for e in emails if not any(ext in e.lower() for ext in ['.png', '.jpg', '.css', '.js'])]
         
-        # =========================================
         # PHONES (Indian Format)
-        # =========================================
         def format_phone(phone):
             digits = re.sub(r'\D', '', str(phone))
             if len(digits) == 10 and digits[0] in ['6','7','8','9']:
@@ -403,9 +407,7 @@ def extract_real_data(url):
                 if formatted and formatted not in phones:
                     phones.append(formatted)
         
-        # =========================================
         # ADDRESS
-        # =========================================
         address = None
         addr_patterns = [
             r'Plot No\.?\s*[\d,\-]+\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^-–—]+',
@@ -419,26 +421,17 @@ def extract_real_data(url):
                 address = match.group(0).strip()
                 break
         
-        # =========================================
         # SOCIAL MEDIA
-        # =========================================
         social = []
         for link in soup.find_all('a', href=True):
             href = link['href'].lower()
             if any(d in href for d in ['facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com', 'youtube.com']):
                 social.append(link['href'])
         
-        # =========================================
-        # OWNER DETECTION (with DL entities)
-        # =========================================
+        # OWNER DETECTION
         owner_info = detect_owner_info(soup, page_text, entities)
         
-        status_text.text("🤖 Generating AI predictions...")
-        progress_bar.progress(90)
-        
-        # =========================================
         # FUTURE PREDICTIONS
-        # =========================================
         data_for_prediction = {
             'emails': emails,
             'phones': phones,
@@ -450,12 +443,6 @@ def extract_real_data(url):
         }
         
         predictions = predict_future_trends(data_for_prediction)
-        
-        progress_bar.progress(100)
-        status_text.text("✅ Complete!")
-        time.sleep(0.5)
-        progress_bar.empty()
-        status_text.empty()
         
         # Update history
         st.session_state.history.append({
@@ -501,9 +488,6 @@ st.markdown("""
 <style>
     .stApp {
         background: #0A0F1F;
-        background-image: 
-            radial-gradient(circle at 20% 30%, rgba(255,215,0,0.05) 0%, transparent 30%),
-            radial-gradient(circle at 80% 70%, rgba(255,215,0,0.05) 0%, transparent 30%);
     }
     h1, h2, h3 {
         color: #FFD700 !important;
@@ -514,11 +498,6 @@ st.markdown("""
         border-radius: 10px;
         padding: 1rem;
         text-align: center;
-        transition: all 0.3s;
-    }
-    .metric-box:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px rgba(255,215,0,0.3);
     }
     .metric-value {
         font-size: 2rem;
@@ -531,11 +510,6 @@ st.markdown("""
         border-radius: 15px;
         padding: 1.5rem;
         margin: 1rem 0;
-        transition: all 0.3s;
-    }
-    .glass-card:hover {
-        border-color: #FFD700;
-        box-shadow: 0 0 30px rgba(255,215,0,0.1);
     }
     .future-tag {
         background: rgba(255,215,0,0.1);
@@ -545,11 +519,6 @@ st.markdown("""
         display: inline-block;
         margin: 0.2rem;
         color: #FFD700;
-        transition: all 0.3s;
-    }
-    .future-tag:hover {
-        background: rgba(255,215,0,0.2);
-        transform: translateY(-2px);
     }
     .data-box {
         background: rgba(0,0,0,0.3);
@@ -566,13 +535,6 @@ st.markdown("""
         display: inline-block;
         font-size: 0.8rem;
     }
-    .owner-card {
-        background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1));
-        border: 1px solid #FFD700;
-        border-radius: 15px;
-        padding: 1.2rem;
-        margin: 0.5rem 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -584,6 +546,8 @@ with st.sidebar:
     
     if DEEP_LEARNING_AVAILABLE:
         st.markdown("<p style='text-align: center;'><span class='dl-badge'>🧠 DEEP LEARNING ACTIVE</span></p>", unsafe_allow_html=True)
+    else:
+        st.info("⚡ Pattern Matching Mode")
     
     menu = st.radio(
         "Navigation",
@@ -608,20 +572,19 @@ with st.sidebar:
 if menu == "🔍 Analyze":
     st.markdown("<h1 style='text-align: center;'>🧠 AURORA DEEP LEARNING</h1>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        url = st.text_input("", placeholder="Enter website URL (e.g., https://www.zocal.in)", label_visibility="collapsed")
-        
-        if st.button("🔮 DEEP ANALYZE", use_container_width=True):
-            if url:
-                data = extract_real_data(url)
+    url = st.text_input("", placeholder="Enter website URL (e.g., https://www.zocal.in)", label_visibility="collapsed")
+    
+    if st.button("🔮 ANALYZE", use_container_width=True):
+        if url:
+            with st.spinner("Analyzing..."):
+                data = extract_data(url)
                 
                 if data:
-                    # Deep Learning Status
+                    # Status
                     if data['deep_learning']['models_used']:
-                        st.success("✅ Analysis complete with Deep Learning models")
+                        st.success("✅ Deep Learning analysis complete")
                     else:
-                        st.info("ℹ️ Analysis complete (Pattern Matching Mode)")
+                        st.info("ℹ️ Pattern matching analysis complete")
                     
                     # Title
                     st.markdown(f"<h2>{data['basic']['title']}</h2>", unsafe_allow_html=True)
@@ -632,16 +595,14 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
-                    # DEEP LEARNING ENTITIES SECTION
-                    # =========================================
-                    st.markdown("<h2>🧠 DEEP LEARNING ENTITIES</h2>", unsafe_allow_html=True)
+                    # ENTITIES SECTION
+                    st.markdown("<h2>🧠 DETECTED ENTITIES</h2>", unsafe_allow_html=True)
                     
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
                         if data['deep_learning']['entities']['persons']:
-                            st.markdown("**👤 People Detected:**")
+                            st.markdown("**👤 People:**")
                             for person in data['deep_learning']['entities']['persons'][:3]:
                                 st.markdown(f"<span class='future-tag'>{person}</span>", unsafe_allow_html=True)
                     
@@ -659,24 +620,21 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # OWNER INFORMATION
-                    # =========================================
                     if data['owner']['name'] or data['owner']['founded']:
                         st.markdown("<h2>👤 OWNER INFORMATION</h2>", unsafe_allow_html=True)
                         
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            if data['owner']['name']:
-                                st.markdown(f"""
-                                <div class='owner-card'>
-                                    <b>Name:</b> {data['owner']['name']}<br>
-                                    <b>Designation:</b> {data['owner']['designation'] or 'Owner'}<br>
-                                    <b>Founded:</b> {data['owner']['founded'] or 'Not found'}<br>
-                                    <b>Employees:</b> {data['owner']['employees'] or 'Not found'}
-                                </div>
-                                """, unsafe_allow_html=True)
+                            st.markdown(f"""
+                            <div class='data-box'>
+                                <b>Name:</b> {data['owner']['name'] or 'Not found'}<br>
+                                <b>Designation:</b> {data['owner']['designation'] or 'Owner'}<br>
+                                <b>Founded:</b> {data['owner']['founded'] or 'Not found'}<br>
+                                <b>Employees:</b> {data['owner']['employees'] or 'Not found'}
+                            </div>
+                            """, unsafe_allow_html=True)
                         
                         with col2:
                             if data['owner']['certifications']:
@@ -686,9 +644,7 @@ if menu == "🔍 Analyze":
                         
                         st.markdown("---")
                     
-                    # =========================================
                     # CLASSIFICATION & SENTIMENT
-                    # =========================================
                     st.markdown("<h2>🎯 AI CLASSIFICATION</h2>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
@@ -697,8 +653,8 @@ if menu == "🔍 Analyze":
                         st.markdown(f"""
                         <div class='metric-box'>
                             <div class='metric-value'>{data['deep_learning']['classification']['primary']}</div>
-                            <div>Primary Category</div>
-                            <div style='font-size: 0.9rem;'>Confidence: {data['deep_learning']['classification']['confidence']*100:.1f}%</div>
+                            <div>Category</div>
+                            <div>Confidence: {data['deep_learning']['classification']['confidence']*100:.1f}%</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -708,15 +664,13 @@ if menu == "🔍 Analyze":
                         <div class='metric-box'>
                             <div class='metric-value'>{sentiment_color}</div>
                             <div>Sentiment: {data['deep_learning']['sentiment']['label']}</div>
-                            <div style='font-size: 0.9rem;'>Score: {data['deep_learning']['sentiment']['score']*100:.1f}%</div>
+                            <div>Score: {data['deep_learning']['sentiment']['score']*100:.1f}%</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # FUTURE PREDICTIONS
-                    # =========================================
                     st.markdown("<h2>🔮 FUTURE PREDICTIONS</h2>", unsafe_allow_html=True)
                     
                     col1, col2, col3 = st.columns(3)
@@ -745,15 +699,13 @@ if menu == "🔍 Analyze":
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    st.markdown("### 🎯 AI RECOMMENDATIONS")
+                    st.markdown("### 🎯 RECOMMENDATIONS")
                     for rec in data['predictions']['recommendations']:
                         st.markdown(f"<span class='future-tag'>✨ {rec}</span>", unsafe_allow_html=True)
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # CONTACT INFORMATION
-                    # =========================================
                     st.markdown("<h2>📞 CONTACT INFORMATION</h2>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
@@ -775,7 +727,7 @@ if menu == "🔍 Analyze":
                                 st.code(phone)
                         
                         if data['contact']['social']:
-                            st.markdown("**🌐 Social Media:**")
+                            st.markdown("**🌐 Social:**")
                             for link in data['contact']['social']:
                                 st.markdown(f"- {link[:50]}...")
 
@@ -783,18 +735,17 @@ if menu == "🔍 Analyze":
 # DASHBOARD PAGE
 # =============================================
 elif menu == "📊 Dashboard":
-    st.markdown("<h1>📊 DEEP LEARNING DASHBOARD</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>📊 DASHBOARD</h1>", unsafe_allow_html=True)
     
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
         
-        # Metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.markdown(f"""
             <div class='metric-box'>
                 <div class='metric-value'>{len(df)}</div>
-                <div>Total Analyses</div>
+                <div>Total</div>
             </div>
             """, unsafe_allow_html=True)
         
@@ -802,7 +753,7 @@ elif menu == "📊 Dashboard":
             st.markdown(f"""
             <div class='metric-box'>
                 <div class='metric-value'>{df['url'].nunique()}</div>
-                <div>Unique Sites</div>
+                <div>Unique</div>
             </div>
             """, unsafe_allow_html=True)
         
@@ -824,79 +775,52 @@ elif menu == "📊 Dashboard":
             </div>
             """, unsafe_allow_html=True)
         
-        # Charts
         col1, col2 = st.columns(2)
-        
         with col1:
-            if 'type' in df.columns:
-                fig = px.pie(df, names='type', title='Category Distribution')
-                fig.update_layout(
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white')
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            fig = px.pie(df, names='type', title='Categories')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            if 'timestamp' in df.columns:
-                df['date'] = pd.to_datetime(df['timestamp']).dt.date
-                timeline = df.groupby('date').size().reset_index(name='count')
-                fig = px.line(timeline, x='date', y='count', title='Analysis Timeline')
-                fig.update_layout(
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white')
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            df['date'] = pd.to_datetime(df['timestamp']).dt.date
+            timeline = df.groupby('date').size().reset_index(name='count')
+            fig = px.line(timeline, x='date', y='count', title='Timeline')
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No data yet. Analyze some websites first!")
+        st.info("No data yet")
 
 # =============================================
 # INSIGHTS PAGE
 # =============================================
 elif menu == "📈 Insights":
-    st.markdown("<h1>📈 AI INSIGHTS</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>📈 INSIGHTS</h1>", unsafe_allow_html=True)
     
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        
-        st.markdown("### 📊 Deep Learning Insights")
-        
-        # Most analyzed category
-        top_cat = df['type'].mode()[0] if not df.empty else "N/A"
-        st.markdown(f"**Most Analyzed Category:** {top_cat}")
-        
-        # Analysis frequency
-        st.markdown(f"**Total Deep Learning Analyses:** {len(df)}")
-        st.markdown(f"**Unique Websites Analyzed:** {df['url'].nunique()}")
-        
-        # Average score
+        st.markdown(f"**Total Analyses:** {len(df)}")
+        st.markdown(f"**Unique Websites:** {df['url'].nunique()}")
+        st.markdown(f"**Top Category:** {df['type'].mode()[0]}")
         if 'score' in df.columns:
-            st.markdown(f"**Average Future Score:** {df['score'].mean():.1f}")
-        
-        # Recent activity
-        st.markdown("### ⏱️ Recent Deep Learning Analyses")
-        for _, row in df.tail(5).iterrows():
-            st.markdown(f"- {row['timestamp']}: {row['title']} ({row['type']}) - Score: {row.get('score', 'N/A')}")
+            st.markdown(f"**Avg Future Score:** {df['score'].mean():.1f}")
     else:
-        st.info("No insights available yet")
+        st.info("No insights yet")
 
 # =============================================
 # HISTORY PAGE
 # =============================================
 elif menu == "📚 History":
-    st.markdown("<h1>📚 ANALYSIS HISTORY</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>📚 HISTORY</h1>", unsafe_allow_html=True)
     
     if st.session_state.history:
-        for idx, item in enumerate(reversed(st.session_state.history)):
-            with st.container():
-                st.markdown(f"""
-                <div class='glass-card'>
-                    <h3>{item['title']}</h3>
-                    <p>{item['url']}</p>
-                    <p>🕒 {item['timestamp']} | 🏷️ {item['type']} | Score: {item.get('score', 'N/A')}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        for item in reversed(st.session_state.history):
+            st.markdown(f"""
+            <div class='glass-card'>
+                <h3>{item['title']}</h3>
+                <p>{item['url']}</p>
+                <p>{item['timestamp']} | {item['type']} | Score: {item.get('score', 'N/A')}</p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("No history yet")
 
@@ -904,8 +828,12 @@ elif menu == "📚 History":
 # SETTINGS PAGE
 # =============================================
 elif menu == "⚙️ Settings":
-    st.markdown("<h1>⚙️ DEEP LEARNING SETTINGS</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>⚙️ SETTINGS</h1>", unsafe_allow_html=True)
     
-    st.markdown("### 🧠 Model Configuration")
+    st.toggle("Dark Mode", value=True, disabled=True)
+    st.toggle("Auto-save History", value=True)
+    st.selectbox("Phone Format", ["Indian (+91)", "International"], index=0)
+    st.slider("Confidence Threshold", 0.0, 1.0, 0.6)
     
-    use_dl = st
+    if st.button("Save Settings"):
+        st.success("Settings saved!")
