@@ -884,10 +884,9 @@ elif menu == "📊 Dashboard":
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            # Timeline chart
+            # Create timeline data
             df_timeline = df.copy()
             df_timeline['date'] = pd.to_datetime(df_timeline['timestamp']).dt.date
             timeline_data = df_timeline.groupby('date').size().reset_index(name='count')
             
-            
-            fig = px.line(tim)
+            fig = px
