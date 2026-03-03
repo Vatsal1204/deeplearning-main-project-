@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
 from urllib.parse import urlparse, urljoin
+import json
+import random
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -27,9 +29,17 @@ if 'analysis_count' not in st.session_state:
     st.session_state.analysis_count = 0
 if 'favorites' not in st.session_state:
     st.session_state.favorites = []
+if 'settings' not in st.session_state:
+    st.session_state.settings = {
+        'dark_mode': True,
+        'auto_save': True,
+        'phone_format': 'Indian (+91)',
+        'deep_learning': True,
+        'confidence_threshold': 0.6
+    }
 
 # =============================================
-# ADVANCED DEEP LEARNING FUNCTIONS (SIMULATED)
+# ADVANCED DEEP LEARNING FUNCTIONS
 # =============================================
 def deep_learning_predictions(data):
     """Simulate deep learning predictions for business insights"""
@@ -43,7 +53,8 @@ def deep_learning_predictions(data):
         'recommended_actions': np.random.choice([
             'Expand digital presence', 'Increase social media engagement', 
             'Optimize for mobile users', 'Add customer reviews section',
-            'Improve page load speed', 'Add live chat support'
+            'Improve page load speed', 'Add live chat support',
+            'Implement SEO strategy', 'Create email newsletter'
         ], size=3, replace=False).tolist()
     }
     
@@ -260,7 +271,7 @@ def extract_real_data(url):
         
         for pattern in phone_patterns:
             found = re.findall(pattern, response.text)
-            for f in found:
+            for f in found[:3]:  # Limit to 3 phones
                 formatted = format_phone(f)
                 if formatted and formatted not in phones:
                     phones.append(formatted)
@@ -339,7 +350,9 @@ def extract_real_data(url):
             'title': title[:50],
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'type': website_type,
-            'score': dl_predictions['future_scope_score']
+            'score': dl_predictions['future_scope_score'],
+            'emails': len(emails),
+            'phones': len(phones)
         })
         st.session_state.analysis_count += 1
         
@@ -533,6 +546,33 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 2px;
     }
+    
+    /* History cards */
+    .history-card {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,215,0,0.1);
+        border-radius: 15px;
+        padding: 1.2rem;
+        margin: 0.8rem 0;
+        transition: all 0.3s;
+    }
+    
+    .history-card:hover {
+        border-color: rgba(255,215,0,0.3);
+        transform: translateX(5px);
+        background: rgba(255,215,0,0.02);
+    }
+    
+    /* Settings toggle */
+    .setting-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: rgba(255,255,255,0.02);
+        border-radius: 10px;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -608,9 +648,7 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # FUTURE SCOPE & PREDICTIONS SECTION
-                    # =========================================
                     st.markdown("<div class='section-title'>🔮 FUTURE SCOPE & PREDICTIONS</div>", unsafe_allow_html=True)
                     
                     col1, col2, col3 = st.columns(3)
@@ -647,7 +685,7 @@ if menu == "🔍 Analyze":
                         """, unsafe_allow_html=True)
                     
                     # Recommended actions
-                    st.markdown("""
+                    st.markdown(f"""
                     <div class='glass-premium'>
                         <div style='color: #FFD700; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 AI RECOMMENDATIONS</div>
                     """, unsafe_allow_html=True)
@@ -659,19 +697,21 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # OWNER INFORMATION SECTION
-                    # =========================================
                     st.markdown("<div class='section-title'>👤 OWNER INFORMATION</div>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
                     
                     with col1:
+                        owner_name = data['owner']['name'] if data['owner']['name'] else 'Not detected'
+                        founded = data['owner']['founded'] if data['owner']['founded'] else 'Not detected'
+                        employees = data['owner']['employees'] if data['owner']['employees'] else 'Not detected'
+                        
                         st.markdown(f"""
                         <div class='data-box'>
-                            <b>Name:</b> {data['owner']['name'] if data['owner']['name'] else 'Not detected'}<br>
-                            <b>Founded:</b> {data['owner']['founded'] if data['owner']['founded'] else 'Not detected'}<br>
-                            <b>Employees:</b> {data['owner']['employees'] if data['owner']['employees'] else 'Not detected'}
+                            <b>Name:</b> {owner_name}<br>
+                            <b>Founded:</b> {founded}<br>
+                            <b>Employees:</b> {employees}
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -680,12 +720,12 @@ if menu == "🔍 Analyze":
                             st.markdown("**Certifications:**")
                             for cert in data['owner']['certifications']:
                                 st.markdown(f"<span class='future-tag'>✓ {cert}</span>", unsafe_allow_html=True)
+                        else:
+                            st.info("No certifications detected")
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # CONTACT INFORMATION
-                    # =========================================
                     st.markdown("<div class='section-title'>📞 CONTACT DETAILS</div>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
@@ -717,9 +757,7 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # CLASSIFICATION
-                    # =========================================
                     st.markdown("<div class='section-title'>🎯 CLASSIFICATION</div>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
@@ -753,9 +791,7 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # =========================================
                     # TECHNOLOGY STACK
-                    # =========================================
                     st.markdown("<div class='section-title'>🛠️ TECHNOLOGY STACK</div>", unsafe_allow_html=True)
                     
                     if data['advanced']['technologies']:
@@ -766,9 +802,7 @@ if menu == "🔍 Analyze":
                     else:
                         st.info("No technologies detected")
                     
-                    # =========================================
                     # PERFORMANCE METRICS
-                    # =========================================
                     st.markdown("<div class='section-title'>📊 PERFORMANCE METRICS</div>", unsafe_allow_html=True)
                     
                     col1, col2, col3, col4 = st.columns(4)
@@ -805,6 +839,9 @@ if menu == "🔍 Analyze":
                         </div>
                         """, unsafe_allow_html=True)
 
+# =============================================
+# DASHBOARD PAGE
+# =============================================
 elif menu == "📊 Dashboard":
     st.markdown("<h1 class='neon-text'>📊 ANALYTICS DASHBOARD</h1>", unsafe_allow_html=True)
     
@@ -852,33 +889,4 @@ elif menu == "📊 Dashboard":
         col1, col2 = st.columns(2)
         
         with col1:
-            fig = px.pie(df, names='type', title='Category Distribution',
-                        color_discrete_sequence=px.colors.sequential.YlOrRd)
-            fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white')
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            timeline = df['timestamp'].value_counts().sort_index()
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=timeline.index,
-                y=timeline.values,
-                mode='lines+markers',
-                line=dict(color='#FFD700', width=3),
-                marker=dict(size=8, color='#FFD700')
-            ))
-            fig.update_layout(
-                title='Analysis Timeline',
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white')
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Recent activity
-        st.markdown("---")
-        st.markdown("<div class='section-title'>📋 RECENT ACTIVITY</div>", unsafe_allow_html=True)
+            fig = px.pie(df,
