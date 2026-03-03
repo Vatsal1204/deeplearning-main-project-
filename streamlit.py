@@ -271,7 +271,7 @@ def extract_real_data(url):
         
         for pattern in phone_patterns:
             found = re.findall(pattern, response.text)
-            for f in found[:3]:  # Limit to 3 phones
+            for f in found[:3]:
                 formatted = format_phone(f)
                 if formatted and formatted not in phones:
                     phones.append(formatted)
@@ -514,17 +514,6 @@ st.markdown("""
         transition: width 1s ease;
     }
     
-    /* Pulse animation */
-    @keyframes pulse {
-        0% { opacity: 0.6; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.05); }
-        100% { opacity: 0.6; transform: scale(1); }
-    }
-    
-    .pulse {
-        animation: pulse 2s infinite;
-    }
-    
     /* Data boxes */
     .data-box {
         background: rgba(0,0,0,0.3);
@@ -610,12 +599,12 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
 # =============================================
-# MAIN CONTENT
+# ANALYZE PAGE
 # =============================================
 if menu == "🔍 Analyze":
     st.markdown("<h1 class='neon-text'>✨ AURORA INTELLIGENCE</h1>", unsafe_allow_html=True)
     
-    # Input section with animation
+    # Input section
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("""
@@ -631,7 +620,7 @@ if menu == "🔍 Analyze":
                 data = extract_real_data(url)
                 
                 if data:
-                    # Header with favorite button
+                    # Header
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.markdown(f"<h2 style='color: white;'>{data['basic']['title']}</h2>", unsafe_allow_html=True)
@@ -648,7 +637,7 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # FUTURE SCOPE & PREDICTIONS SECTION
+                    # FUTURE SCOPE & PREDICTIONS
                     st.markdown("<div class='section-title'>🔮 FUTURE SCOPE & PREDICTIONS</div>", unsafe_allow_html=True)
                     
                     col1, col2, col3 = st.columns(3)
@@ -657,7 +646,7 @@ if menu == "🔍 Analyze":
                         score = data['predictions']['future_scope_score']
                         st.markdown(f"""
                         <div class='glass-premium' style='text-align: center;'>
-                            <div style='color: #FFD700; font-size: 1.1rem;'>FUTURE SCORE</div>
+                            <div style='color: #FFD700;'>FUTURE SCORE</div>
                             <div style='font-size: 3rem; color: white;'>{score}</div>
                             <div class='progress-gold'>
                                 <div class='progress-gold-fill' style='width: {score}%;'></div>
@@ -668,7 +657,7 @@ if menu == "🔍 Analyze":
                     with col2:
                         st.markdown(f"""
                         <div class='glass-premium'>
-                            <div style='color: #FFD700; font-size: 1.1rem;'>MARKET TREND</div>
+                            <div style='color: #FFD700;'>MARKET TREND</div>
                             <div style='font-size: 2rem;'>{data['predictions']['market_trend']}</div>
                             <div style='color: #aaa;'>Growth: {data['predictions']['growth_potential']}</div>
                         </div>
@@ -678,14 +667,14 @@ if menu == "🔍 Analyze":
                         risk_color = "🟢" if data['predictions']['risk_score'] < 40 else "🟡" if data['predictions']['risk_score'] < 70 else "🔴"
                         st.markdown(f"""
                         <div class='glass-premium'>
-                            <div style='color: #FFD700; font-size: 1.1rem;'>RISK ASSESSMENT</div>
+                            <div style='color: #FFD700;'>RISK ASSESSMENT</div>
                             <div style='font-size: 2rem;'>{risk_color}</div>
                             <div style='color: #aaa;'>Risk Score: {data['predictions']['risk_score']}/100</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
                     # Recommended actions
-                    st.markdown(f"""
+                    st.markdown("""
                     <div class='glass-premium'>
                         <div style='color: #FFD700; font-size: 1.1rem; margin-bottom: 1rem;'>🎯 AI RECOMMENDATIONS</div>
                     """, unsafe_allow_html=True)
@@ -697,7 +686,7 @@ if menu == "🔍 Analyze":
                     
                     st.markdown("---")
                     
-                    # OWNER INFORMATION SECTION
+                    # OWNER INFORMATION
                     st.markdown("<div class='section-title'>👤 OWNER INFORMATION</div>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
@@ -720,8 +709,6 @@ if menu == "🔍 Analyze":
                             st.markdown("**Certifications:**")
                             for cert in data['owner']['certifications']:
                                 st.markdown(f"<span class='future-tag'>✓ {cert}</span>", unsafe_allow_html=True)
-                        else:
-                            st.info("No certifications detected")
                     
                     st.markdown("---")
                     
@@ -799,8 +786,6 @@ if menu == "🔍 Analyze":
                         for i, tech in enumerate(data['advanced']['technologies']):
                             with cols[i % 4]:
                                 st.markdown(f"<span class='future-tag'>{tech}</span>", unsafe_allow_html=True)
-                    else:
-                        st.info("No technologies detected")
                     
                     # PERFORMANCE METRICS
                     st.markdown("<div class='section-title'>📊 PERFORMANCE METRICS</div>", unsafe_allow_html=True)
@@ -889,4 +874,20 @@ elif menu == "📊 Dashboard":
         col1, col2 = st.columns(2)
         
         with col1:
-            fig = px.pie(df,
+            fig = px.pie(df, names='type', title='Category Distribution',
+                        color_discrete_sequence=px.colors.sequential.YlOrRd)
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Timeline chart
+            df_timeline = df.copy()
+            df_timeline['date'] = pd.to_datetime(df_timeline['timestamp']).dt.date
+            timeline_data = df_timeline.groupby('date').size().reset_index(name='count')
+            
+            
+            fig = px.line(tim)
